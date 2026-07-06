@@ -54,7 +54,7 @@
 - [x] `clean_vehicle_only`: only vehicle cooperative sources.
 - [x] `null_all_missing_flag`: cooperative sources marked missing.
 - [x] `null_rsu_only`: RSU payload nulled, vehicles clean.
-- [ ] `null_all_image`: retry after sentinel zero-payload fix.
+- [x] `null_all_image`: retry after sentinel zero-payload fix.
 - [x] `null_vehicle_only`: retry after sentinel zero-payload fix.
 
 Result roots:
@@ -142,13 +142,13 @@ Each launcher root should contain:
 
 ## 7. Current Operational TODO
 
-- [ ] Finish FARM1 `phase0_null_all_image_seed0` retry.
+- [x] Finish FARM1 `phase0_null_all_image_seed0` retry.
 - [x] Finish FARM9 `phase0_null_vehicle_only_seed0` retry.
-- [ ] Aggregate both phase 0 roots after retries complete.
-- [ ] Keep FARM phase 0 launchers configured to automatically start phase 1 pilot after successful phase 0.
+- [x] Aggregate both phase 0 roots after retries complete.
+- [x] Keep FARM phase 0 launchers configured to automatically start phase 1 pilot after successful phase 0.
 - [x] Finish CPS repo/checkpoint/env setup.
 - [x] Start CPS phase 1 pilot watcher if no GPU is immediately free.
 - [x] Confirm first CPS phase 1 sample reaches `progress 25/...`.
 - [x] Commit and push every harness/doc change before relying on CPS, because FARM and CPS use separate storage.
 
-Last checked: 2026-07-07 03:18 KST. FARM1 retry `phase0_null_all_image_seed0` is still running on FARM1 GPU 3 under `phase0_farm1_20260706_085007`; latest `run.log` reached `progress 3150/3560`, no hard error pattern observed, `summary.json` is not present yet, and the chained command remains set to aggregate phase 0 then launch FARM1 phase 1 pilot on success. FARM9 retry `phase0_null_vehicle_only_seed0` completed after reaching `progress 3550/3560`: `summary.json`, `combined/summary.csv`, and `combined/RESULTS.md` are present under `phase0_farm9_20260706_085007`, with recent hard error pattern count 0. The FARM9 chained command launched phase1 pilot root `phase1_pilot_farm9_20260706_181437`; launcher status is `running=2`, and the latest phase1 progress reached `progress 100/3560`. CPS watcher PID `2611377` launched `phase1_pilot_cps_20260707_025118` on GPU 0; the active first CPS phase1 job is still running and reached `progress 625/3560`, `summary.json` is not present yet, and the only recent matching lines are non-fatal delayed-source replacement warnings.
+Last checked: 2026-07-07 03:35 KST. FARM1 retry `phase0_null_all_image_seed0` completed cleanly after reaching `progress 3550/3560`: `summary.json`, `combined/summary.csv`, and `combined/RESULTS.md` are present under `phase0_farm1_20260706_085007`, with recent hard error pattern count 0. Both FARM phase 0 retry roots are now aggregated. The FARM1 chained command launched phase1 pilot root `phase1_pilot_farm1_20260706_183438`; launcher status is `running=3`, `summary.json` count is 0, and first progress has not been logged yet. FARM9 phase1 pilot root `phase1_pilot_farm9_20260706_181437` is running with launcher status `running=2`, latest phase1 progress `progress 525/3560`, and `summary.json` count 0. CPS watcher PID `2611377` remains active after launching `phase1_pilot_cps_20260707_025118` on GPU 0; the active first CPS phase1 job reached `progress 975/3560`, `summary.json` count is 0, and the only recent matching lines are non-fatal delayed-source replacement warnings.
