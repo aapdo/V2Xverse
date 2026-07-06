@@ -142,7 +142,7 @@ class TransformerFusion(nn.Module):
             fused_feature = fused_feature.permute(0,2,1).reshape(1, C, H, W)
 
             x_fuse.append(fused_feature)
-        x_fuse = torch.concat(x_fuse, dim=0)
+        x_fuse = torch.cat(x_fuse, dim=0)
         return x_fuse
 
 def add_pe_map(x):

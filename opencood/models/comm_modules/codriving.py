@@ -138,7 +138,7 @@ class Communication(nn.Module):
             communication_rates.append(communication_rate)
             batch_communication_maps.append(ori_communication_maps*communication_mask_nodiag)
         communication_rates = sum(communication_rates)/B
-        # communication_masks = torch.stack(communication_masks, dim=0)  ## torch.concat
-        communication_masks = torch.concat(communication_masks, dim=0)
+        # communication_masks = torch.stack(communication_masks, dim=0)
+        communication_masks = torch.cat(communication_masks, dim=0)
         
         return batch_communication_maps, communication_masks, communication_rates
