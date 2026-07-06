@@ -82,8 +82,8 @@ Purpose: validate representative physical/corruption families before launching t
 - [ ] `bandwidth_cap/s3/all_shifted`
 - [ ] `fov_left_loss/s3/rsu_shifted_only`
 - [ ] `fov_right_loss/s3/vehicle_shifted_only`
-- [ ] `pose_noise/s3/all_shifted`
-- [ ] `camera_crash/s3/rsu_shifted_only`
+- [x] `pose_noise/s3/all_shifted`
+- [x] `camera_crash/s3/rsu_shifted_only`
 - [ ] `color_quant/s3/rsu_shifted_only`
 - [ ] `jpeg/s3/rsu_shifted_only`
 - [ ] `compound_avail/mid/all_shifted`
@@ -151,4 +151,4 @@ Each launcher root should contain:
 - [x] Confirm first CPS phase 1 sample reaches `progress 25/...`.
 - [x] Commit and push every harness/doc change before relying on CPS, because FARM and CPS use separate storage.
 
-Last checked: 2026-07-07 03:36 KST. FARM1 retry `phase0_null_all_image_seed0` completed cleanly after reaching `progress 3550/3560`: `summary.json`, `combined/summary.csv`, and `combined/RESULTS.md` are present under `phase0_farm1_20260706_085007`, with recent hard error pattern count 0. Both FARM phase 0 retry roots are now aggregated. The FARM1 chained command launched phase1 pilot root `phase1_pilot_farm1_20260706_183438`; launcher status is `running=3`, first phase1 progress reached `progress 25/3560`, and `summary.json` count is 0. FARM9 phase1 pilot root `phase1_pilot_farm9_20260706_181437` is running with launcher status `running=2`, latest phase1 progress `progress 525/3560`, and `summary.json` count 0. CPS watcher PID `2611377` remains active after launching `phase1_pilot_cps_20260707_025118` on GPU 0; the active first CPS phase1 job reached `progress 975/3560`, `summary.json` count is 0, and the only recent matching lines are non-fatal delayed-source replacement warnings.
+Last checked: 2026-07-07 05:20 KST. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` is running with launcher status `running=3`, latest phase1 progress `progress 1675/3560`, and `summary.json` count 0. FARM9 phase1 pilot root `phase1_pilot_farm9_20260706_181437` completed two jobs cleanly (`pose_noise/s3/all_shifted`, `camera_crash/s3/rsu_shifted_only`) with `summary.json` count 2 and launcher status `done=2,running=2`; current running jobs are `color_quant/s3/rsu_shifted_only` and `jpeg/s3/rsu_shifted_only`. CPS watcher PID `2611377` remains active after launching `phase1_pilot_cps_20260707_025118` on GPU 0; the active CPS phase1 job reached `progress 3400/3560`, `summary.json` count is 0, and the only recent matching lines are non-fatal delayed-source replacement warnings.
