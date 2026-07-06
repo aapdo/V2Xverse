@@ -23,6 +23,10 @@
 - CPS checkpoints:
   - perception: `/data/adas/e2e/external/V2Xverse/checkpoints/codriving/perception`
   - planner: `/data/adas/e2e/external/V2Xverse/checkpoints/codriving/planner/codriving_planner.ckpt`
+- CPS watcher:
+  - pid file: `/data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_pilot_cps_waiter.pid`
+  - log file: `/data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_pilot_cps_waiter.log`
+  - default free-GPU threshold: memory used `<=2048MiB`, utilization `<=20%`
 
 ## 2. Config Files
 
@@ -142,7 +146,7 @@ Each launcher root should contain:
 - [ ] Finish FARM9 `phase0_null_vehicle_only_seed0` retry.
 - [ ] Aggregate both phase 0 roots after retries complete.
 - [ ] Keep FARM phase 0 launchers configured to automatically start phase 1 pilot after successful phase 0.
-- [ ] Finish CPS repo/checkpoint/env setup.
-- [ ] Start CPS phase 1 pilot watcher if no GPU is immediately free.
+- [x] Finish CPS repo/checkpoint/env setup.
+- [x] Start CPS phase 1 pilot watcher if no GPU is immediately free.
 - [ ] Confirm first CPS phase 1 sample reaches `progress 25/...`.
 - [ ] Commit and push every harness/doc change before relying on CPS, because FARM and CPS use separate storage.
