@@ -189,6 +189,7 @@ visualization/results
 
 # linked dataset
 ./data/
+/dataset
 
 # results
 out_dir/

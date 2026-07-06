@@ -31,6 +31,7 @@
 - `jobs_phase1_full.tsv`: full open-loop shift sweep 후보.
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
+- `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
 
 ## Phase Chaining
 
@@ -72,6 +73,16 @@ Pilot을 작은 sample 수로 먼저 돌릴 때:
 V2X_MAX_SAMPLES=128 nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_pilot_farm1.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_pilot_farm1_launcher.log 2>&1 &
 ```
+
+CPS에서 GPU가 비는 즉시 phase 1 pilot을 시작하려면:
+
+```bash
+cd /data/adas/e2e/external/V2Xverse
+nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_pilot_cps.sh \
+  > /data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_pilot_cps_waiter.log 2>&1 &
+```
+
+기본 free GPU 기준은 memory used `<=2048MiB`, utilization `<=20%`입니다. 필요하면 `V2X_FREE_MEM_LIMIT_MIB`, `V2X_FREE_UTIL_LIMIT_PCT`, `V2X_MAX_GPUS`로 조정합니다.
 
 기본 launch script는 host별 split TSV를 사용합니다. 전체 TSV를 한 머신에서 돌리고 싶으면 `JOB_FILE`을 override합니다.
 
