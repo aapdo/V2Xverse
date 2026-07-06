@@ -190,44 +190,49 @@ class V2XVERSEBaseDataset(Dataset):
         
         print("Sub route dir nums: %d" % len(self.route_frames))
 
+    def _resolve_path(self, path):
+        if os.path.isabs(path) or os.path.exists(path):
+            return path
+        return os.path.join(self.root_dir, path)
+
     def _load_text(self, path):
-        text = open(os.path.join(self.root_dir,path), 'r').read()
+        text = open(self._resolve_path(path), 'r').read()
         return text
 
     def _load_image(self, path):
         trans_totensor = torchvision.transforms.ToTensor()
         trans_toPIL = torchvision.transforms.ToPILImage()
         try:
-            img = Image.open(os.path.join(self.root_dir,path))
+            img = Image.open(self._resolve_path(path))
             img_tensor = trans_totensor(img)
             img_PIL = trans_toPIL(img_tensor)
         except Exception as e:
             _logger.info(path)
             n = path[-8:-4]
             new_path = path[:-8] + "%04d.jpg" % (int(n) - 1)
-            img = Image.open(os.path.join(self.root_dir,new_path))
+            img = Image.open(self._resolve_path(new_path))
             img_tensor = trans_totensor(img)
             img_PIL = trans_toPIL(img_tensor)
         return img_PIL
 
     def _load_json(self, path):
         try:
-            json_value = json.load(open(os.path.join(self.root_dir,path)))
+            json_value = json.load(open(self._resolve_path(path)))
         except Exception as e:
             _logger.info(path)
             n = path[-9:-5]
             new_path = path[:-9] + "%04d.json" % (int(n) - 1)
-            json_value = json.load(open(os.path.join(self.root_dir,new_path)))
+            json_value = json.load(open(self._resolve_path(new_path)))
         return json_value
 
     def _load_npy(self, path):
         try:
-            array = np.load(os.path.join(self.root_dir,path), allow_pickle=True)
+            array = np.load(self._resolve_path(path), allow_pickle=True)
         except Exception as e:
             _logger.info(path)
             n = path[-8:-4]
             new_path = path[:-8] + "%04d.npy" % (int(n) - 1)
-            array = np.load(os.path.join(self.root_dir,new_path), allow_pickle=True)
+            array = np.load(self._resolve_path(new_path), allow_pickle=True)
         return array
 
     def get_one_record(self, route_dir, frame_id, agent='ego', visible_actors=None, tpe='all', extra_source=None):

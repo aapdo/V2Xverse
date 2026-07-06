@@ -1,7 +1,11 @@
-import spconv
 import torch
 import numpy as np
-from spconv.modules import SparseModule
+try:
+    import spconv
+    from spconv.modules import SparseModule
+except ModuleNotFoundError:
+    import spconv.pytorch as spconv
+    from spconv.pytorch.modules import SparseModule
 from opencood.utils.box_utils import project_points_by_matrix_torch
 from torch_scatter import scatter
 from icecream import ic 
