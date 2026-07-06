@@ -71,7 +71,7 @@ Required completion artifact per root:
 
 Purpose: validate representative physical/corruption families before launching the full Cartesian sweep.
 
-- [ ] `latency_det/s1/all_shifted`
+- [x] `latency_det/s1/all_shifted`
 - [ ] `latency_det/s3/all_shifted`
 - [ ] `latency_jitter/s3/all_shifted`
 - [ ] `latency_jitter/stress/rsu_shifted_only`
@@ -151,4 +151,4 @@ Each launcher root should contain:
 - [x] Confirm first CPS phase 1 sample reaches `progress 25/...`.
 - [x] Commit and push every harness/doc change before relying on CPS, because FARM and CPS use separate storage.
 
-Last checked: 2026-07-07 05:20 KST. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` is running with launcher status `running=3`, latest phase1 progress `progress 1675/3560`, and `summary.json` count 0. FARM9 phase1 pilot root `phase1_pilot_farm9_20260706_181437` completed two jobs cleanly (`pose_noise/s3/all_shifted`, `camera_crash/s3/rsu_shifted_only`) with `summary.json` count 2 and launcher status `done=2,running=2`; current running jobs are `color_quant/s3/rsu_shifted_only` and `jpeg/s3/rsu_shifted_only`. CPS watcher PID `2611377` remains active after launching `phase1_pilot_cps_20260707_025118` on GPU 0; the active CPS phase1 job reached `progress 3400/3560`, `summary.json` count is 0, and the only recent matching lines are non-fatal delayed-source replacement warnings.
+Last checked: 2026-07-07 05:29 KST. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` is running with launcher status `running=3`, latest phase1 progress `progress 1825/3560`, and `summary.json` count 0. FARM9 phase1 pilot root `phase1_pilot_farm9_20260706_181437` remains at launcher status `done=2,running=2`, with completed jobs `pose_noise/s3/all_shifted` and `camera_crash/s3/rsu_shifted_only`; current running jobs are `color_quant/s3/rsu_shifted_only` and `jpeg/s3/rsu_shifted_only`. CPS watcher PID `2611377` remains active; CPS phase1 root `phase1_pilot_cps_20260707_025118` completed `latency_det/s1/all_shifted` cleanly with `summary.json` count 1 and launched `latency_det/s3/all_shifted`, which reached `progress 50/3560`. The only recent matching lines are non-fatal delayed-source replacement warnings.
