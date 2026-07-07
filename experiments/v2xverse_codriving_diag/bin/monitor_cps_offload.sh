@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Run this on a controller host that can SSH to both FARM and CPS.
 # It waits for free CPS GPUs, claims pending jobs from the FARM shared queue,
-# runs those jobs on CPS, then merges CPS launcher_status.csv back to FARM.
+# launches those jobs on CPS, then recovers/merges finished CPS batches.
 
 FARM_HOST="${FARM_HOST:-FARM9}"
 CPS_HOST="${CPS_HOST:-cps_workstation}"
@@ -37,13 +37,22 @@ memory_rule() {
   fi
 }
 
+active_cps_offload_gpus() {
+  ssh -o ConnectTimeout=10 "$CPS_HOST" \
+    "pgrep -af 'launch_local_queue.py .*phase1_full_cps_offload' | awk '{for (i=1; i<=NF; i++) { if (\$i == \"--gpus\") { n=split(\$(i+1), g, \",\"); for (j=1; j<=n; j++) print g[j]; } }}' | sort -u | paste -sd, -" \
+    || true
+}
+
 select_free_gpus() {
+  local active_gpus active_lookup
+  active_gpus="$(active_cps_offload_gpus)"
+  active_lookup=",$active_gpus,"
   ssh -o ConnectTimeout=10 "$CPS_HOST" \
     "nvidia-smi --query-gpu=index,memory.used,memory.free,utilization.gpu --format=csv,noheader,nounits" \
-    | awk -F, -v min_free="$MIN_FREE_MIB" -v max_used="$MAX_USED_MIB" -v util="$UTIL_LIMIT_PCT" -v max="$MAX_GPUS" '
+    | awk -F, -v min_free="$MIN_FREE_MIB" -v max_used="$MAX_USED_MIB" -v util="$UTIL_LIMIT_PCT" -v max="$MAX_GPUS" -v active="$active_lookup" '
       {
         gsub(/ /, "", $1); gsub(/ /, "", $2); gsub(/ /, "", $3); gsub(/ /, "", $4);
-        if ($3 >= min_free && (max_used <= 0 || $2 <= max_used) && $4 <= util) {
+        if (index(active, "," $1 ",") == 0 && $3 >= min_free && (max_used <= 0 || $2 <= max_used) && $4 <= util) {
           if (count > 0) {
             printf(",");
           }
@@ -117,10 +126,10 @@ recover_cps_batches() {
   done <<< "$batches"
 }
 
-completed_batches=0
+launched_batches=0
 while true; do
-  if [ "$BATCHES" != "0" ] && [ "$completed_batches" -ge "$BATCHES" ]; then
-    log "completed requested CPS offload batches=$completed_batches"
+  if [ "$BATCHES" != "0" ] && [ "$launched_batches" -ge "$BATCHES" ]; then
+    log "launched requested CPS offload batches=$launched_batches"
     exit 0
   fi
 
@@ -158,21 +167,13 @@ while true; do
   scp "$LOCAL_JOBS" "$CPS_HOST:$CPS_JOBS" >/dev/null
 
   log "launching CPS offload batch=$BATCH on GPUs=$GPUS"
-  ssh "$CPS_HOST" "cd '$CPS_ROOT' && mkdir -p '$CPS_RESULTS_ROOT' && JOB_FILE='$CPS_JOBS' OUT_ROOT='$CPS_OUT' V2X_GPU_LIST='$GPUS' nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh > '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.log' 2>&1 & echo \$! > '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.pid'"
-
-  while ssh "$CPS_HOST" "pid=\$(cat '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.pid' 2>/dev/null || true); [ -n \"\$pid\" ] && kill -0 \"\$pid\" 2>/dev/null"; do
-    log "CPS offload batch=$BATCH still running"
-    sleep "$POLL_SECONDS"
-  done
-
-  if ssh "$CPS_HOST" "[ -f '$CPS_OUT/launcher_status.csv' ]"; then
-    scp "$CPS_HOST:$CPS_OUT/launcher_status.csv" "$LOCAL_STATUS" >/dev/null
-    scp "$LOCAL_STATUS" "$FARM_HOST:$FARM_STATUS" >/dev/null
-    ssh "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py merge --queue-root '$QUEUE_ROOT' --launcher-status '$FARM_STATUS' --host-id cps"
-    completed_batches=$((completed_batches + 1))
-    log "merged CPS offload batch=$BATCH completed_batches=$completed_batches"
-  else
-    log "missing CPS launcher_status for batch=$BATCH; releasing claimed rows"
+  if ! ssh "$CPS_HOST" "cd '$CPS_ROOT' && mkdir -p '$CPS_RESULTS_ROOT' && JOB_FILE='$CPS_JOBS' OUT_ROOT='$CPS_OUT' V2X_GPU_LIST='$GPUS' nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh > '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.log' 2>&1 & echo \$! > '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.pid'"; then
+    log "failed to launch CPS offload batch=$BATCH; releasing claimed rows"
     release_batch "$LOCAL_IDS"
+    sleep "$POLL_SECONDS"
+    continue
   fi
+  launched_batches=$((launched_batches + 1))
+  log "launched CPS offload batch=$BATCH launched_batches=$launched_batches"
+  sleep "$POLL_SECONDS"
 done

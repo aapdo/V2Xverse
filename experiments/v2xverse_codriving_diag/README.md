@@ -182,7 +182,7 @@ python experiments/v2xverse_codriving_diag/offload_shared_jobs.py release \
   --host-id cps
 ```
 
-Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 기본적으로 free GPU마다 `2`개 job을 claim하므로 CPS 안에서도 먼저 끝난 GPU가 같은 CPS batch의 다음 job을 계속 가져갑니다. 매 loop에서 이미 offload된 CPS batch의 `launcher_status.csv`도 확인해 완료된 batch를 FARM shared queue로 merge합니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`와 `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`로 batch depth를 조정합니다.
+Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 이미 실행 중인 CPS offload GPU를 제외하고 새 free GPU만 고른 뒤, free GPU마다 기본 `2`개 job을 claim합니다. Launch 후 batch 종료를 blocking wait하지 않고 다음 loop로 돌아가므로, CPS 한쪽 GPU가 먼저 끝나면 다른 batch가 아직 running이어도 새 job을 다시 claim할 수 있습니다. 매 loop에서 이미 offload된 CPS batch의 `launcher_status.csv`도 확인해 완료된 batch를 FARM shared queue로 merge합니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`와 `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`로 batch depth를 조정합니다.
 
 ```bash
 QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
