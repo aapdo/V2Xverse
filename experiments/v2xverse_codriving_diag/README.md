@@ -45,6 +45,7 @@
 - `bin/monitor_cps_offload.sh`: SSH로 FARM shared queue와 CPS를 연결해 free CPS GPU에 job을 자동 offload하는 controller용 monitor.
 - `bin/monitor_objective_chain.sh`: 현재 FARM shared queue가 drain되면 `jobs_objective_full.tsv` objective queue를 FARM/CPS에 자동으로 이어서 띄우는 controller용 monitor.
 - `bin/monitor_done_postprocess.sh`: FARM shared queue의 completed run만 주기적으로 aggregate/enrich하는 monitor.
+- `bin/launch_farm_shared_backstop_waiters.sh`: 이미 떠 있는 old FARM launcher가 종료된 뒤에도 같은 shared queue로 다시 붙도록 FARM2/6/7/8/9 GPU별 waiters를 설치하는 controller용 helper.
 - `bin/watch_cps_offload_batch.sh`: CPS offload batch가 launch된 뒤 monitor가 중단됐을 때 completion merge/release를 이어받는 recovery watcher.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
 
@@ -101,7 +102,7 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_pilot_cps.
 
 Full sweep을 돌릴 때 기본 방식은 FARM shared queue입니다. 정적으로 host별 job 수를 고정하지 않고, FARM2/6/7/8/9와 나중에 비는 FARM1이 같은 pending queue를 소비합니다. 먼저 끝난 host/GPU worker가 다음 pending row를 계속 claim하므로, 특정 서버에 미리 배정된 몫이 끝났다고 놀지 않습니다.
 
-재분배 원칙은 다음과 같습니다. FARM 쪽은 같은 `shared_queue_status.csv`를 보므로 완료가 빠른 GPU가 바로 다음 pending row를 가져갑니다. CPS 쪽은 `/data`가 별도라 직접 lock을 공유하지 않고, monitor가 free GPU마다 FARM pending row를 `offloaded`로 lease한 뒤 CPS에서 실행하고 완료 결과를 FARM root로 복사/merge합니다. FARM worker는 기본 `V2X_SHARED_IDLE_POLL_SECONDS=300`으로 큐가 완전히 끝나기 전까지 종료하지 않으므로, CPS 실패/release 등으로 pending row가 다시 생겨도 idle FARM GPU가 다시 붙을 수 있습니다.
+재분배 원칙은 다음과 같습니다. FARM 쪽은 같은 `shared_queue_status.csv`를 보므로 완료가 빠른 GPU가 바로 다음 pending row를 가져갑니다. CPS 쪽은 `/data`가 별도라 직접 lock을 공유하지 않고, monitor가 free GPU마다 FARM pending row를 `offloaded`로 lease한 뒤 CPS에서 실행하고 완료 결과를 FARM root로 복사/merge합니다. FARM worker는 기본 `V2X_SHARED_IDLE_POLL_SECONDS=300`으로 큐가 완전히 끝나기 전까지 종료하지 않으므로, CPS 실패/release 등으로 pending row가 다시 생겨도 idle FARM GPU가 다시 붙을 수 있습니다. 이미 패치 전 launcher가 떠 있는 queue에는 `launch_farm_shared_backstop_waiters.sh`를 별도로 걸어 두면 기존 launcher가 종료된 뒤 GPU별 waiter가 같은 queue로 재합류합니다.
 
 ```bash
 cd /home/jy/adas/external/V2Xverse
@@ -118,6 +119,13 @@ V2X_HOST_TAG=farm9 V2X_GPU_LIST=1,2 nohup bash experiments/v2xverse_codriving_di
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm9_launcher.log 2>&1 &
 V2X_HOST_TAG=farm1 V2X_ALLOWED_GPUS=1,2,3 V2X_MIN_GPUS=3 nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm1_waiter.log 2>&1 &
+```
+
+이미 실행 중인 shared queue에 backstop waiters를 추가할 때:
+
+```bash
+OUT_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
+bash experiments/v2xverse_codriving_diag/bin/launch_farm_shared_backstop_waiters.sh
 ```
 
 원 objective 전체 Stage 0-6을 새 root에서 돌릴 때는 `JOB_FILE`만 objective TSV로 바꿉니다.
