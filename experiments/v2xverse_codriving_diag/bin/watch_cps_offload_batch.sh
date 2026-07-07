@@ -37,10 +37,39 @@ release_batch() {
   ssh "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py release --queue-root '$QUEUE_ROOT' --host-id cps --run-id-file '$remote_ids'"
 }
 
+batch_state() {
+  if ssh "$CPS_HOST" "test -f '$CPS_OUT/launcher_status.csv' && grep -q ',running,' '$CPS_OUT/launcher_status.csv'"; then
+    echo "running"
+    return
+  fi
+  if ssh "$CPS_HOST" "test -f '$CPS_OUT/launcher_status.csv' && grep -Eq ',(done|failed),' '$CPS_OUT/launcher_status.csv'"; then
+    echo "finished"
+    return
+  fi
+  if ssh "$CPS_HOST" "pid=\$(cat '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.pid' 2>/dev/null || true); [ -n \"\$pid\" ] && kill -0 \"\$pid\" 2>/dev/null"; then
+    echo "starting"
+    return
+  fi
+  echo "missing"
+}
+
 log "watching CPS offload batch=$BATCH"
-while ssh "$CPS_HOST" "pid=\$(cat '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.pid' 2>/dev/null || true); [ -n \"\$pid\" ] && kill -0 \"\$pid\" 2>/dev/null"; do
-  log "CPS offload batch=$BATCH still running"
-  sleep "$POLL_SECONDS"
+while true; do
+  STATE="$(batch_state)"
+  case "$STATE" in
+    running|starting)
+      log "CPS offload batch=$BATCH state=$STATE"
+      sleep "$POLL_SECONDS"
+      ;;
+    finished)
+      log "CPS offload batch=$BATCH state=finished"
+      break
+      ;;
+    *)
+      log "CPS offload batch=$BATCH state=$STATE"
+      break
+      ;;
+  esac
 done
 
 if ssh "$CPS_HOST" "[ -f '$CPS_OUT/launcher_status.csv' ]"; then
