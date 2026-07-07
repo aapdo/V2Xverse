@@ -34,6 +34,7 @@
 - Queue launcher: `experiments/v2xverse_codriving_diag/launch_local_queue.py`
 - Shared-storage queue launcher: `experiments/v2xverse_codriving_diag/launch_shared_queue.py`
 - Cross-storage offload helper: `experiments/v2xverse_codriving_diag/offload_shared_jobs.py`
+- Planning delta/coop-state enricher: `experiments/v2xverse_codriving_diag/enrich_planning_deltas.py`
 - Result aggregation: `experiments/v2xverse_codriving_diag/aggregate_results.py`
 - Job generation: `experiments/v2xverse_codriving_diag/make_jobs.py`
 - CoDriving config loaded by the harness: `codriving/hypes_yaml/codriving/end2end_codriving.yaml`
@@ -99,6 +100,11 @@ Required completion artifact per root:
 
 - `combined/summary.csv`
 - `combined/RESULTS.md`
+
+Delta/coop-state enrichment artifact:
+
+- Combined phase0 enriched planning CSV: `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase0_baseline_planning_enriched.csv`
+- Per-run enriched planning CSVs: `per_sample_planning_enriched.csv` in each phase0 run directory.
 
 ## 4. Phase 1 Pilot Sweep
 
@@ -260,7 +266,7 @@ This is the user-requested target plan from the goal objective. The current exec
 
 ## 5.2 Mandatory Logging Target
 
-Every open-loop run should ultimately log the fields below. Current files cover the core planning fields, normalized aliases, ADE/FDE horizon aliases, approximate communication payload fields, and a broader set of per-agent transform audit fields. The remaining request-map internals, route-corridor overlap, and delta-vs-baseline fields are backlog items.
+Every open-loop run should ultimately log the fields below. Current files cover the core planning fields, normalized aliases, ADE/FDE horizon aliases, approximate communication payload fields, and a broader set of per-agent transform audit fields. `enrich_planning_deltas.py` post-fills delta-vs-baseline, worse-than, and coop-state fields when baseline roots are available. The remaining request-map internals and route-corridor overlap fields are backlog items.
 
 - Planning: `sample_id`, `scenario_id`, `frame_id`, `setting`, `shift_family`, `severity`, `application_mode`, `shift_seed`, `ADE`, `FDE`, `ADE@1s`, `ADE@2s`, `ADE@3s`, `ADE@4s`, `FDE@final`, `delta_ADE_vs_clean_all`, `delta_ADE_vs_ego`, `delta_ADE_vs_null_all`, `delta_ADE_vs_clean_best_single_source`, `worse_than_clean_all`, `worse_than_ego`, `worse_than_null_all`, `worse_than_clean_best_single_source`, `delta_ADE_gt_0p2`, `delta_ADE_gt_0p5`, `delta_ADE_gt_1p0`.
 - Perception: `mAP`, `AP_vehicle`, `AP_pedestrian`, `AP_cyclist`, `AP30`, `AP50`, `AP70`, `recall_vehicle`, `recall_pedestrian`, `precision_vehicle`, `precision_pedestrian`, `num_gt_vehicle`, `num_pred_vehicle`, `num_tp_vehicle`, `num_fp_vehicle`, `num_fn_vehicle`, `AP_near_gt_traj_5m`, `recall_near_gt_traj_5m`, `FN_near_gt_traj_5m`, `AP_route_corridor`, `recall_route_corridor`.
@@ -296,4 +302,4 @@ Each launcher root should contain:
 - [x] Confirm first CPS phase 1 sample reaches `progress 25/...`.
 - [x] Commit and push every harness/doc change before relying on CPS, because FARM and CPS use separate storage.
 
-Last checked: 2026-07-07 12:40 KST. The earlier shared root `phase1_full_farm_shared_20260707_121317` was stopped because it was generated before CPS-offload removal and covered only the FARM slice. It was replaced by the full `300`-job shared FARM queue at `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_20260707_122043`; status file is `shared_queue_status.csv`. Active shared queue workers: FARM2 PID `83489` on GPUs `0,1`, FARM6 PID `81591` on GPUs `0,1,2`, FARM7 PID `81698` on GPUs `0,1,2`, FARM8 PID `83242` on GPUs `0,1,2,3`, FARM9 PID `44934` on GPUs `1,2`; FARM1 shared waiter PID `89159` waits for GPUs `1,2,3` after pilot completion. Current shared queue status is `running=14,pending=286`, with runs past `progress 325/3560` and no fatal traceback/RuntimeError observed. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` remains at `done=6,running=3`, so FARM1 has not joined the shared full queue yet. CPS duplicate pilot/full processes are not active; CPS is held as optional offload only while its GPUs are occupied by non-V2X `python3` jobs. Cross-storage CPS offload is handled by `offload_shared_jobs.py`, and controller Mac LaunchAgent `com.jy.v2x.cps-offload` is running with log `/tmp/v2x_cps_offload_monitor_launchd.log`; it will claim CPS offload jobs only after CPS GPUs satisfy the free-GPU threshold. New harness support added for aliases, `clean_best_single_source` proxy, `missing_camera`, `pose_bias`, `pose_drift`, `calibration`, `topk_feature_cap` proxy, `request_region_cap` proxy, expanded per-agent communication/audit fields, and objective Stage 0-6 TSVs (`428` total jobs).
+Last checked: 2026-07-07 12:45 KST. The earlier shared root `phase1_full_farm_shared_20260707_121317` was stopped because it was generated before CPS-offload removal and covered only the FARM slice. It was replaced by the full `300`-job shared FARM queue at `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_20260707_122043`; status file is `shared_queue_status.csv`. Active shared queue workers: FARM2 PID `83489` on GPUs `0,1`, FARM6 PID `81591` on GPUs `0,1,2`, FARM7 PID `81698` on GPUs `0,1,2`, FARM8 PID `83242` on GPUs `0,1,2,3`, FARM9 PID `44934` on GPUs `1,2`; FARM1 shared waiter PID `89159` waits for GPUs `1,2,3` after pilot completion. Current shared queue status is `running=14,pending=286`, with runs past `progress 625/3560` and no fatal traceback/RuntimeError observed. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` remains at `done=6,running=3`, so FARM1 has not joined the shared full queue yet. CPS duplicate pilot/full processes are not active; CPS is held as optional offload only while its GPUs are occupied by non-V2X `python3` jobs. Cross-storage CPS offload is handled by `offload_shared_jobs.py`, and controller Mac LaunchAgent `com.jy.v2x.cps-offload` is running with log `/tmp/v2x_cps_offload_monitor_launchd.log`; it will claim CPS offload jobs only after CPS GPUs satisfy the free-GPU threshold. New harness support added for aliases, `clean_best_single_source` proxy, `missing_camera`, `pose_bias`, `pose_drift`, `calibration`, `topk_feature_cap` proxy, `request_region_cap` proxy, expanded per-agent communication/audit fields, objective Stage 0-6 TSVs (`428` total jobs), and post-hoc planning baseline delta enrichment. Phase0 baseline enrichment generated `28480` rows with `3560` baseline keys.
