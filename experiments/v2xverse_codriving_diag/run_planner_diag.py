@@ -125,6 +125,70 @@ def severity_value(severity, table, default=None):
     return next(iter(table.values()))
 
 
+SETTING_ALIASES = {
+    "clean_cav_only": "clean_vehicle_only",
+    "null_rsu_only_cav_clean": "null_rsu_only",
+    "null_cav_only_rsu_clean": "null_vehicle_only",
+}
+
+FAMILY_ALIASES = {
+    "packet_drop_input": "packet_drop",
+    "compound_availability": "compound_avail",
+    "compound_physical": "compound_lcf",
+}
+
+MODE_ALIASES = {
+    "rsu_shifted_only_cav_clean": "rsu_shifted_only",
+    "cav_shifted_only_rsu_clean": "vehicle_shifted_only",
+    "one_source_null_one_clean": "one_null_one_clean",
+    "all_sources_limited": "all_shifted",
+    "rsu_limited_cav_full": "rsu_shifted_only",
+    "cav_limited_rsu_full": "vehicle_shifted_only",
+}
+
+CAMERA_KEYS = ("rgb_front", "rgb_left", "rgb_right", "rgb_rear")
+
+
+def normalize_setting(setting):
+    return SETTING_ALIASES.get(setting or "clean_all", setting or "clean_all")
+
+
+def normalize_family(family):
+    return FAMILY_ALIASES.get(family or "none", family or "none")
+
+
+def normalize_mode(mode):
+    return MODE_ALIASES.get(mode or "none", mode or "none")
+
+
+def estimate_payload_bytes(record):
+    if record is None:
+        return 0
+    total = 0
+    lidar = record.get("lidar_np")
+    if isinstance(lidar, np.ndarray):
+        total += int(lidar.size * lidar.dtype.itemsize)
+    for key in CAMERA_KEYS:
+        img = record.get(key)
+        if isinstance(img, Image.Image):
+            total += int(img.size[0] * img.size[1] * len(img.getbands()))
+    return total
+
+
+def count_valid_cameras(record):
+    if record is None:
+        return 0
+    images = record.get("camera_data") if isinstance(record.get("camera_data"), list) else [record.get(key) for key in CAMERA_KEYS]
+    valid = 0
+    for img in images:
+        if not isinstance(img, Image.Image):
+            continue
+        arr = np.asarray(img)
+        if arr.size and arr.mean() > 1.0:
+            valid += 1
+    return valid
+
+
 class CsvWriter:
     def __init__(self, path, fieldnames):
         self.path = Path(path)
@@ -150,10 +214,13 @@ class DiagnosticContext:
     def __init__(self, args):
         self.args = args
         self.run_id = args.run_id
-        self.setting = args.setting
-        self.shift_family = args.shift_family or "none"
+        self.setting = normalize_setting(args.setting)
+        self.shift_family = normalize_family(args.shift_family)
         self.severity = args.severity or "none"
-        self.application_mode = args.application_mode or "none"
+        self.application_mode = normalize_mode(args.application_mode)
+        self.original_setting = args.setting
+        self.original_shift_family = args.shift_family or "none"
+        self.original_application_mode = args.application_mode or "none"
         self.shift_seed = args.shift_seed
         self.audit_rows = []
         self.agent_rows = []
@@ -162,7 +229,13 @@ class DiagnosticContext:
         seed = stable_int(self.shift_seed, self.run_id, route_id, frame_id, cav_id, salt) % (2**32)
         return np.random.default_rng(seed)
 
-    def source_allowed_by_setting(self, cav_id):
+    def choose_single_source(self, data):
+        coop_ids = [cav_id for cav_id in data if cav_id != "car_0"]
+        rsu_ids = sorted(cav_id for cav_id in coop_ids if agent_type(cav_id) == "rsu")
+        cav_ids = sorted(cav_id for cav_id in coop_ids if agent_type(cav_id) == "cav")
+        return (rsu_ids or cav_ids or [""])[0]
+
+    def source_allowed_by_setting(self, cav_id, selected_single_source=""):
         t = agent_type(cav_id)
         if t == "ego":
             return True
@@ -172,6 +245,8 @@ class DiagnosticContext:
             return t == "rsu"
         if self.setting == "clean_vehicle_only":
             return t == "cav"
+        if self.setting == "clean_best_single_source":
+            return cav_id == selected_single_source
         return True
 
     def source_zeroed_by_setting(self, cav_id):
@@ -199,8 +274,10 @@ class DiagnosticContext:
             return t == "rsu"
         if mode == "vehicle_shifted_only":
             return t == "cav"
-        if mode == "one_null_one_clean":
+        if mode == "shifted_source_full_clean_source_limited":
             return t == "rsu"
+        if mode == "clean_source_full_shifted_source_limited":
+            return t == "cav"
         return True
 
     def apply(self, dataset, data, idx=None, tpe="all", data_dir=None):
@@ -212,9 +289,10 @@ class DiagnosticContext:
         if scene_dict and scene_dict.get("ego"):
             route_id = str(Path(scene_dict["ego"]).parent)
 
+        selected_single_source = self.choose_single_source(data) if self.setting == "clean_best_single_source" else ""
         removed = []
         for cav_id in list(data.keys()):
-            if not self.source_allowed_by_setting(cav_id):
+            if not self.source_allowed_by_setting(cav_id, selected_single_source):
                 removed.append(cav_id)
                 data.pop(cav_id, None)
 
@@ -226,6 +304,10 @@ class DiagnosticContext:
             if self.source_zeroed_by_setting(cav_id):
                 self.zero_agent(data[cav_id])
                 action = "zeroed_by_setting"
+            elif self.application_mode == "one_null_one_clean" and agent_type(cav_id) == "rsu":
+                self.zero_agent(data[cav_id])
+                action = "one_source_null"
+                params["source_packet_drop_flag"] = True
             elif self.should_shift(cav_id):
                 action, params = self.apply_shift(dataset, data, cav_id, scene_dict, frame_id, route_id, tpe)
 
@@ -252,6 +334,10 @@ class DiagnosticContext:
             "agent_available": record is not None,
             "agent_shifted": action not in {"clean", "removed_by_setting"},
             "agent_action": action,
+            "agent_selected": record is not None,
+            "source_selected_by_request": "",
+            "source_attention_weight": "",
+            "source_fusion_weight": "",
         }
         row.update(params)
         if record is not None and "params" in record:
@@ -262,13 +348,20 @@ class DiagnosticContext:
                 "source_yaw": pose[4] if len(pose) > 4 else "",
             })
             if "lidar_np" in record:
-                row["source_valid_lidar_points"] = int(np.count_nonzero(np.linalg.norm(record["lidar_np"][:, :3], axis=1)))
+                lidar = record["lidar_np"]
+                row["source_valid_lidar_points"] = int(np.count_nonzero(np.linalg.norm(lidar[:, :3], axis=1)))
+                row["num_transmitted_features"] = int(lidar.shape[0])
+                row["num_transmitted_tokens"] = int(lidar.shape[0])
             if "rgb_front" in record:
                 row.update(image_to_hashable_stats(record["rgb_front"]))
+            tx_bytes = estimate_payload_bytes(record)
+            row["tx_bytes"] = tx_bytes
+            row["tx_kb"] = tx_bytes / 1024.0
+            row["valid_camera_count"] = row.get("valid_camera_count", count_valid_cameras(record))
         return row
 
     def zero_agent(self, record):
-        for key in ("rgb_front", "rgb_left", "rgb_right", "rgb_rear"):
+        for key in CAMERA_KEYS:
             if key in record:
                 record[key] = zero_image_like(record[key])
         if "camera_data" in record:
@@ -294,6 +387,94 @@ class DiagnosticContext:
         except Exception as exc:
             LOG.warning("failed delayed source replacement cav=%s frame=%s delay=%s: %s", cav_id, frame_id, delay, exc)
         return False
+
+    def apply_pose_offset(self, record, offset, params, prefix="pose"):
+        for pose_key in ("lidar_pose", "map_pose"):
+            if pose_key in record.get("params", {}):
+                record["params"][pose_key] = (np.asarray(record["params"][pose_key], dtype=float) + offset).tolist()
+        params.update({
+            f"{prefix}_error_m": float(np.linalg.norm(offset[:2])),
+            f"{prefix}_yaw_error_deg": float(abs(offset[4])),
+            "pose_error_m": float(np.linalg.norm(offset[:2])),
+            "yaw_error_deg": float(abs(offset[4])),
+        })
+
+    def apply_missing_camera(self, record, severity, rng, params):
+        image_keys = [key for key in CAMERA_KEYS if isinstance(record.get(key), Image.Image)]
+        camera_count = len(record.get("camera_data", [])) if isinstance(record.get("camera_data"), list) else len(image_keys)
+        drop_fraction = severity_value(severity, {"s1": 0.25, "s2": 0.50, "s3": 0.75, "stress": 1.0})
+        n_drop = min(camera_count, max(1, int(round(camera_count * drop_fraction)))) if camera_count else 0
+        drop_indices = set(int(i) for i in rng.choice(camera_count, n_drop, replace=False)) if n_drop else set()
+        for i, key in enumerate(image_keys):
+            if i in drop_indices:
+                record[key] = zero_image_like(record[key])
+        if isinstance(record.get("camera_data"), list):
+            record["camera_data"] = [
+                zero_image_like(img) if i in drop_indices and isinstance(img, Image.Image) else img
+                for i, img in enumerate(record["camera_data"])
+            ]
+        params.update({
+            "missing_camera_flag": bool(n_drop),
+            "valid_camera_count": max(0, camera_count - n_drop),
+            "masked_camera_count": n_drop,
+        })
+
+    def apply_lidar_keep_ratio(self, record, keep, rng, params, family):
+        lidar = record.get("lidar_np")
+        original_points = int(lidar.shape[0]) if isinstance(lidar, np.ndarray) and lidar.ndim == 2 else 0
+        if original_points > 1:
+            n_keep = max(1, int(original_points * keep))
+            indices = rng.choice(original_points, n_keep, replace=False)
+            record["lidar_np"] = lidar[np.sort(indices)]
+        kept_points = int(record["lidar_np"].shape[0]) if isinstance(record.get("lidar_np"), np.ndarray) else 0
+        params.update({
+            "lidar_point_keep_ratio": keep,
+            "bandwidth_budget": keep,
+            "bandwidth_used_ratio": (kept_points / original_points) if original_points else "",
+            "num_selected_regions": kept_points if family == "request_region_cap" else "",
+        })
+
+    def apply_camera_calibration(self, record, severity, rng, params):
+        trans_std, yaw_deg = severity_value(severity, {
+            "s1": (0.05, 0.25),
+            "s2": (0.10, 0.50),
+            "s3": (0.20, 1.00),
+            "stress": (0.50, 2.00),
+        })
+        trans = np.array([rng.normal(0, trans_std), rng.normal(0, trans_std), rng.normal(0, trans_std)], dtype=np.float32)
+        yaw = float(rng.normal(0, yaw_deg))
+        yaw_rad = np.deg2rad(yaw)
+        rot = np.array([
+            [np.cos(yaw_rad), -np.sin(yaw_rad), 0, 0],
+            [np.sin(yaw_rad), np.cos(yaw_rad), 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ], dtype=np.float32)
+        changed = 0
+        for idx in range(8):
+            camera_key = f"camera{idx}"
+            camera_params = record.get("params", {}).get(camera_key)
+            if not isinstance(camera_params, dict):
+                continue
+            if "extrinsic" in camera_params:
+                ext = np.asarray(camera_params["extrinsic"], dtype=np.float32)
+                if ext.shape == (4, 4):
+                    ext = rot @ ext
+                    ext[:3, 3] += trans
+                    camera_params["extrinsic"] = ext.tolist()
+                    changed += 1
+            if "cords" in camera_params:
+                cords = np.asarray(camera_params["cords"], dtype=float)
+                if cords.size >= 6:
+                    cords[:3] += trans
+                    cords[4] += yaw
+                    camera_params["cords"] = cords.tolist()
+                    changed += 1
+        params.update({
+            "calib_translation_error_m": float(np.linalg.norm(trans)),
+            "calib_yaw_error_deg": float(abs(yaw)),
+            "calibrated_camera_count": changed,
+        })
 
     def apply_shift(self, dataset, data, cav_id, scene_dict, frame_id, route_id, tpe):
         record = data[cav_id]
@@ -321,7 +502,12 @@ class DiagnosticContext:
         if family in {"frame_lost_hold", "frame_lost_zero", "packet_drop"}:
             prob = severity_value(severity, {"s1": 0.10, "s2": 0.30, "s3": 0.50, "stress": 0.75})
             dropped = bool(rng.random() < prob)
-            params.update({"drop_probability": prob, "source_packet_drop_flag": dropped})
+            params.update({
+                "drop_probability": prob,
+                "source_packet_drop_flag": dropped,
+                "packet_drop_flag": dropped if family == "packet_drop" else False,
+                "frame_lost_flag": dropped if family.startswith("frame_lost") else False,
+            })
             if dropped:
                 if family == "frame_lost_hold":
                     delay = severity_value(severity, {"s1": 1, "s2": 2, "s3": 4, "stress": 8})
@@ -339,35 +525,72 @@ class DiagnosticContext:
                 "stress": (1.0, 1.0),
             })
             noise = np.array([rng.normal(0, pos_std), rng.normal(0, pos_std), 0, 0, rng.normal(0, yaw_std), 0])
-            for pose_key in ("lidar_pose", "map_pose"):
-                if pose_key in record["params"]:
-                    record["params"][pose_key] = (np.asarray(record["params"][pose_key]) + noise).tolist()
-            params.update({"pose_error_m": float(np.linalg.norm(noise[:2])), "yaw_error_deg": float(abs(noise[4]))})
+            self.apply_pose_offset(record, noise, params)
             return family, params
 
-        if family in {"lidar_point_drop", "bandwidth_cap"} and "lidar_np" in record:
+        if family == "pose_bias":
+            pos_bias, yaw_bias = severity_value(severity, {
+                "s1": (0.20, 0.25),
+                "s2": (0.50, 0.50),
+                "s3": (1.00, 1.00),
+                "stress": (2.00, 2.00),
+            })
+            direction = 1 if stable_int(route_id, cav_id, "pose_bias") % 2 == 0 else -1
+            offset = np.array([direction * pos_bias, -direction * pos_bias * 0.5, 0, 0, direction * yaw_bias, 0], dtype=float)
+            self.apply_pose_offset(record, offset, params, prefix="pose_bias")
+            return family, params
+
+        if family == "pose_drift":
+            pos_per_frame, yaw_per_frame = severity_value(severity, {
+                "s1": (0.01, 0.02),
+                "s2": (0.03, 0.05),
+                "s3": (0.06, 0.10),
+                "stress": (0.12, 0.20),
+            })
+            frame_num = int(frame_id or 0)
+            drift_steps = min(50, max(0, frame_num))
+            offset = np.array([pos_per_frame * drift_steps, pos_per_frame * 0.5 * drift_steps, 0, 0, yaw_per_frame * drift_steps, 0], dtype=float)
+            self.apply_pose_offset(record, offset, params, prefix="pose_drift")
+            params["drift_frames"] = drift_steps
+            return family, params
+
+        if family == "calibration":
+            self.apply_camera_calibration(record, severity, rng, params)
+            return family, params
+
+        if family in {"lidar_point_drop", "bandwidth_cap", "topk_feature_cap", "request_region_cap"} and "lidar_np" in record:
             keep = severity_value(severity, {
                 "s1": 0.75 if family == "bandwidth_cap" else 0.50,
                 "s2": 0.50 if family == "bandwidth_cap" else 0.25,
                 "s3": 0.25 if family == "bandwidth_cap" else 0.10,
                 "stress": 0.10 if family == "bandwidth_cap" else 0.05,
             })
-            lidar = record["lidar_np"]
-            if lidar.shape[0] > 1:
-                n_keep = max(1, int(lidar.shape[0] * keep))
-                indices = rng.choice(lidar.shape[0], n_keep, replace=False)
-                record["lidar_np"] = lidar[np.sort(indices)]
-            params["lidar_point_keep_ratio"] = keep
+            if family == "topk_feature_cap":
+                keep = severity_value(severity, {"s1": 0.50, "s2": 0.25, "s3": 0.10, "stress": 0.05})
+            if family == "request_region_cap":
+                keep = severity_value(severity, {"s1": 0.60, "s2": 0.35, "s3": 0.20, "stress": 0.10})
+            self.apply_lidar_keep_ratio(record, keep, rng, params, family)
             if family == "bandwidth_cap":
                 self.apply_image_transform(record, "resolution", severity, rng, params)
+            if family == "request_region_cap":
+                self.apply_image_transform(record, "fov_center", severity, rng, params)
             return family, params
 
         if family in {
             "fov_center", "fov_left_loss", "fov_right_loss", "fov_top_loss", "fov_bottom_loss",
-            "resolution", "camera_crash", "color_quant", "brightness", "darkness", "contrast",
+            "resolution", "camera_crash", "missing_camera", "color_quant", "brightness", "darkness", "contrast",
             "motion_blur", "defocus_blur", "jpeg", "fog", "rain", "snow",
         }:
-            self.apply_image_transform(record, family, severity, rng, params)
+            if family == "missing_camera":
+                self.apply_missing_camera(record, severity, rng, params)
+            else:
+                self.apply_image_transform(record, family, severity, rng, params)
+                if family == "camera_crash":
+                    valid = count_valid_cameras(record)
+                    params.update({
+                        "camera_crash_flag": valid == 0,
+                        "valid_camera_count": valid,
+                    })
             return family, params
 
         if family == "compound_lcf":
@@ -623,12 +846,18 @@ def run(args):
         "run_id", "date", "host", "gpu", "dataset", "task", "model",
         "checkpoint_perception", "checkpoint_planning", "setting",
         "shift_family", "severity", "application_mode", "shift_seed",
+        "original_setting", "original_shift_family", "original_application_mode",
         "max_samples", "start_index", "stride", "workers",
     ])
     planning_writer = CsvWriter(run_dir / "per_sample_planning.csv", [
-        "run_id", "sample_idx", "route_id", "frame_id", "setting", "shift_family",
-        "severity", "application_mode", "shift_seed", "ADE", "FDE",
+        "run_id", "sample_idx", "sample_id", "route_id", "scenario_id", "frame_id",
+        "setting", "shift_family", "severity", "application_mode", "shift_seed", "ADE", "FDE",
         "ADE_1s", "ADE_2s", "ADE_3s", "ADE_4s", "FDE_horizon",
+        "ADE@1s", "ADE@2s", "ADE@3s", "ADE@4s", "FDE@final",
+        "delta_ADE_vs_clean_all", "delta_ADE_vs_ego", "delta_ADE_vs_null_all",
+        "delta_ADE_vs_clean_best_single_source", "worse_than_clean_all",
+        "worse_than_ego", "worse_than_null_all", "worse_than_clean_best_single_source",
+        "delta_ADE_gt_0p2", "delta_ADE_gt_0p5", "delta_ADE_gt_1p0",
         "pred_waypoints", "gt_waypoints",
     ])
     perception_writer = CsvWriter(run_dir / "per_sample_perception.csv", [
@@ -649,11 +878,14 @@ def run(args):
         "model": "CoDriving",
         "checkpoint_perception": args.model_dir,
         "checkpoint_planning": args.planner_resume,
-        "setting": args.setting,
-        "shift_family": args.shift_family,
+        "setting": DIAG_CONTEXT.setting,
+        "shift_family": DIAG_CONTEXT.shift_family,
         "severity": args.severity,
-        "application_mode": args.application_mode,
+        "application_mode": DIAG_CONTEXT.application_mode,
         "shift_seed": args.shift_seed,
+        "original_setting": DIAG_CONTEXT.original_setting,
+        "original_shift_family": DIAG_CONTEXT.original_shift_family,
+        "original_application_mode": DIAG_CONTEXT.original_application_mode,
         "max_samples": args.max_samples,
         "start_index": args.start_index,
         "stride": args.stride,
@@ -815,12 +1047,14 @@ def run(args):
             planning_writer.write({
                 "run_id": args.run_id,
                 "sample_idx": sample_idx,
+                "sample_id": sample_idx,
                 "route_id": route_id,
+                "scenario_id": route_id,
                 "frame_id": frame_id,
-                "setting": args.setting,
-                "shift_family": args.shift_family,
+                "setting": DIAG_CONTEXT.setting,
+                "shift_family": DIAG_CONTEXT.shift_family,
                 "severity": args.severity,
-                "application_mode": args.application_mode,
+                "application_mode": DIAG_CONTEXT.application_mode,
                 "shift_seed": args.shift_seed,
                 "ADE": ade,
                 "FDE": fde,
@@ -829,6 +1063,14 @@ def run(args):
                 "ADE_3s": float(dis_np[:7].mean()),
                 "ADE_4s": float(dis_np[:10].mean()),
                 "FDE_horizon": float(dis_np[-1]),
+                "ADE@1s": float(dis_np[:2].mean()),
+                "ADE@2s": float(dis_np[:5].mean()),
+                "ADE@3s": float(dis_np[:7].mean()),
+                "ADE@4s": float(dis_np[:10].mean()),
+                "FDE@final": float(dis_np[-1]),
+                "delta_ADE_gt_0p2": "",
+                "delta_ADE_gt_0p5": "",
+                "delta_ADE_gt_1p0": "",
                 "pred_waypoints": json.dumps(pred_wp.tolist()) if args.save_waypoints else "",
                 "gt_waypoints": json.dumps(gt_wp.tolist()) if args.save_waypoints else "",
             })
@@ -852,11 +1094,21 @@ def run(args):
         "shift_seed", "route_id", "frame_id", "agent_id", "agent_type",
         "agent_available", "agent_shifted", "agent_action", "source_pose_x",
         "source_pose_y", "source_yaw", "source_valid_lidar_points", "image_mean",
+        "agent_selected", "source_selected_by_request", "source_attention_weight",
+        "source_fusion_weight", "tx_bytes", "tx_kb", "num_transmitted_features",
+        "num_transmitted_tokens", "num_selected_regions", "bandwidth_budget",
+        "bandwidth_used_ratio", "request_map_mean", "request_map_max",
+        "request_map_entropy", "request_topk_overlap_gt_future",
+        "request_topk_overlap_route", "request_topk_overlap_near_actor",
         "image_std", "delay_frames", "drop_probability", "source_packet_drop_flag",
-        "held_frame_age", "pose_error_m", "yaw_error_deg", "lidar_point_keep_ratio",
-        "fov_keep_ratio", "masked_side", "masked_pixel_ratio", "downsample_ratio",
+        "packet_drop_flag", "frame_lost_flag", "drop_burst_length", "held_frame_age",
+        "pose_error_m", "yaw_error_deg", "pose_bias_error_m", "pose_bias_yaw_error_deg",
+        "pose_drift_error_m", "pose_drift_yaw_error_deg", "drift_frames",
+        "calib_translation_error_m", "calib_yaw_error_deg", "calibrated_camera_count",
+        "lidar_point_keep_ratio", "fov_keep_ratio", "masked_side", "masked_pixel_ratio", "route_corridor_masked_ratio", "downsample_ratio",
         "bits_per_channel", "brightness_scale", "contrast_scale", "blur_kernel",
-        "jpeg_quality", "camera_crash_probability",
+        "jpeg_quality", "camera_crash_probability", "camera_crash_flag",
+        "missing_camera_flag", "valid_camera_count", "masked_camera_count",
     ])
     agent_writer.write_many(DIAG_CONTEXT.agent_rows)
     agent_writer.close()
@@ -873,10 +1125,10 @@ def run(args):
 
     summary = {
         "run_id": args.run_id,
-        "setting": args.setting,
-        "shift_family": args.shift_family,
+        "setting": DIAG_CONTEXT.setting,
+        "shift_family": DIAG_CONTEXT.shift_family,
         "severity": args.severity,
-        "application_mode": args.application_mode,
+        "application_mode": DIAG_CONTEXT.application_mode,
         "shift_seed": args.shift_seed,
         "num_samples": len(ade_values),
         "mean_ADE": float(np.mean(ade_values)) if ade_values else None,

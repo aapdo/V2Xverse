@@ -1,9 +1,10 @@
-run_id	phase	setting	shift_family	severity	application_mode	shift_seed	max_samples
-phase0_ego_only_seed0	phase0	ego_only	none	none	none	0	
-phase0_clean_all_seed0	phase0	clean_all	none	none	none	0	
-phase0_clean_rsu_only_seed0	phase0	clean_rsu_only	none	none	none	0	
-phase0_clean_vehicle_only_seed0	phase0	clean_vehicle_only	none	none	none	0	
-phase0_null_all_image_seed0	phase0	null_all_image	none	none	none	0	
-phase0_null_all_missing_flag_seed0	phase0	null_all_missing_flag	none	none	none	0	
-phase0_null_rsu_only_seed0	phase0	null_rsu_only	none	none	none	0	
-phase0_null_vehicle_only_seed0	phase0	null_vehicle_only	none	none	none	0	
+run_id	phase	setting	shift_family	severity	application_mode	max_samples	shift_seed
+phase0_ego_only_seed0	phase0	ego_only	none	none	none		0
+phase0_clean_all_seed0	phase0	clean_all	none	none	none		0
+phase0_clean_rsu_only_seed0	phase0	clean_rsu_only	none	none	none		0
+phase0_clean_vehicle_only_seed0	phase0	clean_vehicle_only	none	none	none		0
+phase0_clean_best_single_source_seed0	phase0	clean_best_single_source	none	none	none		0
+phase0_null_all_image_seed0	phase0	null_all_image	none	none	none		0
+phase0_null_all_missing_flag_seed0	phase0	null_all_missing_flag	none	none	none		0
+phase0_null_rsu_only_seed0	phase0	null_rsu_only	none	none	none		0
+phase0_null_vehicle_only_seed0	phase0	null_vehicle_only	none	none	none		0

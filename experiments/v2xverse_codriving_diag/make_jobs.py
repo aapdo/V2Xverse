@@ -8,7 +8,7 @@ from pathlib import Path
 
 FIELDS = [
     "run_id", "phase", "setting", "shift_family", "severity",
-    "application_mode", "shift_seed", "max_samples",
+    "application_mode", "max_samples", "shift_seed",
 ]
 
 
@@ -17,6 +17,7 @@ PHASE0 = [
     ("clean_all", "none", "none", "none"),
     ("clean_rsu_only", "none", "none", "none"),
     ("clean_vehicle_only", "none", "none", "none"),
+    ("clean_best_single_source", "none", "none", "none"),
     ("null_all_image", "none", "none", "none"),
     ("null_all_missing_flag", "none", "none", "none"),
     ("null_rsu_only", "none", "none", "none"),
@@ -31,12 +32,19 @@ PILOT = [
     ("clean_all", "latency_jitter", "stress", "rsu_shifted_only"),
     ("clean_all", "frame_lost_hold", "s2", "rsu_shifted_only"),
     ("clean_all", "frame_lost_hold", "s2", "vehicle_shifted_only"),
+    ("clean_all", "frame_lost_hold", "s3", "all_shifted"),
+    ("clean_all", "frame_lost_hold", "stress", "all_shifted"),
     ("clean_all", "frame_lost_zero", "s3", "all_shifted"),
     ("clean_all", "packet_drop", "s3", "all_shifted"),
+    ("clean_all", "packet_drop", "stress", "all_shifted"),
     ("clean_all", "bandwidth_cap", "s3", "all_shifted"),
     ("clean_all", "fov_left_loss", "s3", "rsu_shifted_only"),
+    ("clean_all", "fov_right_loss", "s2", "vehicle_shifted_only"),
     ("clean_all", "fov_right_loss", "s3", "vehicle_shifted_only"),
+    ("clean_all", "missing_camera", "s2", "all_shifted"),
+    ("clean_all", "missing_camera", "s3", "all_shifted"),
     ("clean_all", "pose_noise", "s3", "all_shifted"),
+    ("clean_all", "camera_crash", "s2", "rsu_shifted_only"),
     ("clean_all", "camera_crash", "s3", "rsu_shifted_only"),
     ("clean_all", "color_quant", "s3", "rsu_shifted_only"),
     ("clean_all", "jpeg", "s3", "rsu_shifted_only"),
@@ -44,6 +52,77 @@ PILOT = [
     ("clean_all", "compound_lcf", "mid", "all_shifted"),
     ("clean_all", "compound_photo_comm", "mid", "all_shifted"),
 ]
+
+
+OBJECTIVE_STAGE0 = [
+    ("ego_only", "none", "none", "none"),
+    ("clean_all", "none", "none", "none"),
+    ("clean_rsu_only", "none", "none", "none"),
+    ("clean_cav_only", "none", "none", "none"),
+    ("clean_best_single_source", "none", "none", "none"),
+    ("null_all_image", "none", "none", "none"),
+    ("null_all_missing_flag", "none", "none", "none"),
+    ("null_rsu_only_cav_clean", "none", "none", "none"),
+    ("null_cav_only_rsu_clean", "none", "none", "none"),
+]
+
+SOURCE_MODES = ["all_shifted", "rsu_shifted_only_cav_clean", "cav_shifted_only_rsu_clean"]
+SEVERITIES = ["s1", "s2", "s3", "stress"]
+
+OBJECTIVE_STAGE1 = []
+for family, severities in [
+    ("latency_jitter", ["s3", "stress"]),
+    ("frame_lost_hold", ["s2", "s3", "stress"]),
+    ("packet_drop_input", ["s3", "stress"]),
+    ("fov_left_loss", ["s3"]),
+    ("fov_right_loss", ["s2", "s3"]),
+    ("missing_camera", ["s2", "s3"]),
+    ("camera_crash", ["s2", "s3"]),
+]:
+    for severity in severities:
+        for mode in SOURCE_MODES:
+            OBJECTIVE_STAGE1.append(("clean_all", family, severity, mode))
+
+OBJECTIVE_STAGE2 = []
+for family in [
+    "latency_jitter", "frame_lost_hold", "packet_drop_input", "fov_left_loss",
+    "fov_right_loss", "missing_camera", "camera_crash", "latency_det",
+]:
+    for severity in SEVERITIES:
+        for mode in SOURCE_MODES + ["one_source_null_one_clean"]:
+            OBJECTIVE_STAGE2.append(("clean_all", family, severity, mode))
+
+OBJECTIVE_STAGE3 = []
+for family in ["bandwidth_cap", "topk_feature_cap", "request_region_cap"]:
+    for severity in SEVERITIES:
+        for mode in [
+            "all_sources_limited",
+            "rsu_limited_cav_full",
+            "cav_limited_rsu_full",
+            "shifted_source_full_clean_source_limited",
+            "clean_source_full_shifted_source_limited",
+        ]:
+            OBJECTIVE_STAGE3.append(("clean_all", family, severity, mode))
+
+OBJECTIVE_STAGE4 = []
+for family in ["pose_noise", "pose_bias", "pose_drift", "calibration"]:
+    for severity in SEVERITIES:
+        for mode in SOURCE_MODES:
+            OBJECTIVE_STAGE4.append(("clean_all", family, severity, mode))
+
+OBJECTIVE_STAGE5 = []
+for family in [
+    "color_quant", "resolution", "jpeg", "motion_blur", "defocus_blur",
+    "darkness", "brightness", "contrast", "fog", "rain", "snow",
+]:
+    for severity in SEVERITIES:
+        for mode in SOURCE_MODES:
+            OBJECTIVE_STAGE5.append(("clean_all", family, severity, mode))
+
+OBJECTIVE_STAGE6 = []
+for family in ["compound_availability", "compound_physical", "compound_photo_comm"]:
+    for mode in SOURCE_MODES:
+        OBJECTIVE_STAGE6.append(("clean_all", family, "stress", mode))
 
 
 FULL_FAMILIES = [
@@ -77,7 +156,7 @@ def write(path, rows):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as fh:
-        writer = csv.DictWriter(fh, delimiter="\t", fieldnames=FIELDS)
+        writer = csv.DictWriter(fh, delimiter="\t", fieldnames=FIELDS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -116,6 +195,25 @@ def main():
         row("phase1pilot", setting, family, severity, mode, args.seed, args.pilot_max_samples)
         for setting, family, severity, mode in PILOT
     ])
+
+    objective_specs = {
+        "jobs_objective_stage0.tsv": ("stage0", OBJECTIVE_STAGE0),
+        "jobs_objective_stage1.tsv": ("stage1", OBJECTIVE_STAGE1),
+        "jobs_objective_stage2.tsv": ("stage2", OBJECTIVE_STAGE2),
+        "jobs_objective_stage3.tsv": ("stage3", OBJECTIVE_STAGE3),
+        "jobs_objective_stage4.tsv": ("stage4", OBJECTIVE_STAGE4),
+        "jobs_objective_stage5.tsv": ("stage5", OBJECTIVE_STAGE5),
+        "jobs_objective_stage6.tsv": ("stage6", OBJECTIVE_STAGE6),
+    }
+    objective_rows = []
+    for filename, (phase, specs) in objective_specs.items():
+        rows = [
+            row(phase, setting, family, severity, mode, args.seed, args.full_max_samples)
+            for setting, family, severity, mode in specs
+        ]
+        write(out / filename, rows)
+        objective_rows.extend(rows)
+    write(out / "jobs_objective_full.tsv", objective_rows)
 
     full_rows = []
     for family in FULL_FAMILIES:

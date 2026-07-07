@@ -32,6 +32,8 @@
 - `jobs_phase1_pilot_farm1.tsv`, `jobs_phase1_pilot_farm9.tsv`: pilot host split.
 - `jobs_phase1_full.tsv`: full open-loop shift sweep 전체 job.
 - `jobs_phase1_full_farm_shared.tsv`: FARM 공유 queue용 full sweep 전체 `300`개 job. FARM hosts가 같은 pending list에서 다음 job을 claim하므로 먼저 끝난 서버가 자동으로 더 가져간다.
+- `jobs_objective_stage0.tsv` ... `jobs_objective_stage6.tsv`: 원 objective Stage 0-6을 그대로 펼친 job TSV.
+- `jobs_objective_full.tsv`: Stage 0-6 objective job 전체 `428`개. 현재 running shared root와 분리된 다음 round용 job file이다.
 - `jobs_phase1_full_cps.tsv`: CPS가 실제로 비어 있을 때 offload할 수 있는 optional split.
 - `jobs_phase1_full_farm*.tsv`: static fallback/recovery split.
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
@@ -107,6 +109,15 @@ V2X_HOST_TAG=farm9 V2X_GPU_LIST=1,2 nohup bash experiments/v2xverse_codriving_di
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm9_launcher.log 2>&1 &
 V2X_HOST_TAG=farm1 V2X_ALLOWED_GPUS=1,2,3 V2X_MIN_GPUS=3 nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm1_waiter.log 2>&1 &
+```
+
+원 objective 전체 Stage 0-6을 새 root에서 돌릴 때는 `JOB_FILE`만 objective TSV로 바꿉니다.
+
+```bash
+export OUT_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/objective_full_farm_shared_<stamp>
+export JOB_FILE=experiments/v2xverse_codriving_diag/jobs_objective_full.tsv
+V2X_HOST_TAG=farm8 V2X_GPU_LIST=0,1,2,3 nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh \
+  > experiments/v2xverse_codriving_diag/results/objective_full_farm8_launcher.log 2>&1 &
 ```
 
 CPS에서 full sweep split을 GPU가 비는 즉시 시작하려면:
