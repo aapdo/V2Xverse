@@ -82,10 +82,20 @@ def write(path, rows):
         writer.writerows(rows)
 
 
-def split_weighted(rows, pattern):
-    buckets = {name: [] for name in sorted(set(pattern))}
-    for idx, item in enumerate(rows):
-        buckets[pattern[idx % len(pattern)]].append(item)
+def split_by_counts(rows, counts):
+    buckets = {name: [] for name in counts}
+    remaining = dict(counts)
+    hosts = list(counts)
+    cursor = 0
+    for item in rows:
+        while remaining[hosts[cursor % len(hosts)]] <= 0:
+            cursor += 1
+        host = hosts[cursor % len(hosts)]
+        buckets[host].append(item)
+        remaining[host] -= 1
+        cursor += 1
+    if any(remaining.values()):
+        raise ValueError(f"unused split capacity: {remaining}")
     return buckets
 
 
@@ -117,9 +127,17 @@ def main():
             full_rows.append(row("phase1full", "clean_all", family, severity, "all_shifted", args.seed, args.full_max_samples))
     write(out / "jobs_phase1_full.tsv", full_rows)
 
-    full_split = split_weighted(
+    full_split = split_by_counts(
         full_rows,
-        ["farm9", "farm1", "farm9", "farm1", "cps", "farm9", "farm1", "farm9", "farm1", "cps", "farm9", "farm1"],
+        {
+            "farm8": 66,
+            "farm6": 50,
+            "farm7": 50,
+            "farm1": 50,
+            "farm2": 33,
+            "farm9": 33,
+            "cps": 18,
+        },
     )
     for host, host_rows in full_split.items():
         write(out / f"jobs_phase1_full_{host}.tsv", host_rows)

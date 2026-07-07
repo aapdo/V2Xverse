@@ -29,7 +29,7 @@
 - `jobs_phase1_pilot.tsv`: 대표 shift pilot sweep.
 - `jobs_phase1_pilot_farm1.tsv`, `jobs_phase1_pilot_farm9.tsv`: pilot host split.
 - `jobs_phase1_full.tsv`: full open-loop shift sweep 전체 job.
-- `jobs_phase1_full_farm9.tsv`, `jobs_phase1_full_farm1.tsv`, `jobs_phase1_full_cps.tsv`: full sweep host split.
+- `jobs_phase1_full_farm*.tsv`, `jobs_phase1_full_cps.tsv`: full sweep host split.
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
@@ -89,6 +89,14 @@ Full sweep을 돌릴 때:
 
 ```bash
 cd /home/jy/adas/external/V2Xverse
+nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm2.sh \
+  > experiments/v2xverse_codriving_diag/results/phase1_full_farm2_launcher.log 2>&1 &
+nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm6.sh \
+  > experiments/v2xverse_codriving_diag/results/phase1_full_farm6_launcher.log 2>&1 &
+nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm7.sh \
+  > experiments/v2xverse_codriving_diag/results/phase1_full_farm7_launcher.log 2>&1 &
+nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm8.sh \
+  > experiments/v2xverse_codriving_diag/results/phase1_full_farm8_launcher.log 2>&1 &
 nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm9.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm9_launcher.log 2>&1 &
 nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm1.sh \
