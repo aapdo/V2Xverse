@@ -32,6 +32,8 @@
 
 - Planner/perception harness: `experiments/v2xverse_codriving_diag/run_planner_diag.py`
 - Queue launcher: `experiments/v2xverse_codriving_diag/launch_local_queue.py`
+- Shared-storage queue launcher: `experiments/v2xverse_codriving_diag/launch_shared_queue.py`
+- Cross-storage offload helper: `experiments/v2xverse_codriving_diag/offload_shared_jobs.py`
 - Result aggregation: `experiments/v2xverse_codriving_diag/aggregate_results.py`
 - Job generation: `experiments/v2xverse_codriving_diag/make_jobs.py`
 - CoDriving config loaded by the harness: `codriving/hypes_yaml/codriving/end2end_codriving.yaml`
@@ -151,6 +153,7 @@ Execution policy:
 - FARM1 GPU `0` and FARM9 GPU `0` remain reserved.
 - Static per-host TSVs are fallback/recovery files only. They are not the preferred execution plan because they can leave a server idle after its assigned slice finishes.
 - CPS is optional offload only. Do not run CPS split concurrently while the FARM shared queue contains all `300` jobs, unless those jobs are explicitly removed or marked from the FARM queue first.
+- CPS has separate storage, so it cannot directly join the FARM lock directory. To use CPS safely, first run `offload_shared_jobs.py claim` on FARM to mark pending rows as `offloaded` and write a CPS TSV, copy that TSV to CPS, run `launch_phase1_full_cps.sh` with `JOB_FILE=<offload TSV>`, then merge CPS `launcher_status.csv` back with `offload_shared_jobs.py merge`. If CPS launch is aborted before running, use `offload_shared_jobs.py release --host-id cps`.
 
 Default result roots:
 
@@ -275,4 +278,4 @@ Each launcher root should contain:
 - [x] Confirm first CPS phase 1 sample reaches `progress 25/...`.
 - [x] Commit and push every harness/doc change before relying on CPS, because FARM and CPS use separate storage.
 
-Last checked: 2026-07-07 12:21 KST. The earlier shared root `phase1_full_farm_shared_20260707_121317` was stopped because it was generated before CPS-offload removal and covered only the FARM slice. It was replaced by the full `300`-job shared FARM queue at `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_20260707_122043`; status file is `shared_queue_status.csv`. Active shared queue workers: FARM2 PID `83489` on GPUs `0,1`, FARM6 PID `81591` on GPUs `0,1,2`, FARM7 PID `81698` on GPUs `0,1,2`, FARM8 PID `83242` on GPUs `0,1,2,3`, FARM9 PID `44934` on GPUs `1,2`; FARM1 shared waiter PID `89159` waits for GPUs `1,2,3` after pilot completion. Initial shared queue status is `running=14,pending=286`. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` remains at `running=3`, so FARM1 has not joined the shared full queue yet. CPS duplicate pilot/full processes are not active; CPS is held as optional offload only while FARM shared queue owns all `300` jobs.
+Last checked: 2026-07-07 12:24 KST. The earlier shared root `phase1_full_farm_shared_20260707_121317` was stopped because it was generated before CPS-offload removal and covered only the FARM slice. It was replaced by the full `300`-job shared FARM queue at `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_20260707_122043`; status file is `shared_queue_status.csv`. Active shared queue workers: FARM2 PID `83489` on GPUs `0,1`, FARM6 PID `81591` on GPUs `0,1,2`, FARM7 PID `81698` on GPUs `0,1,2`, FARM8 PID `83242` on GPUs `0,1,2,3`, FARM9 PID `44934` on GPUs `1,2`; FARM1 shared waiter PID `89159` waits for GPUs `1,2,3` after pilot completion. Current shared queue status is `running=14,pending=286`, with runs past `progress 100/3560` and no fatal traceback/RuntimeError observed. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` remains at `done=6,running=3`, so FARM1 has not joined the shared full queue yet. CPS duplicate pilot/full processes are not active; CPS is held as optional offload only while its GPUs are occupied by non-V2X `python3` jobs. Cross-storage CPS offload is now handled by `offload_shared_jobs.py`.

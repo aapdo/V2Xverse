@@ -24,6 +24,7 @@
 - `run_planner_diag.py`: 단일 setting zero-shot 실행기.
 - `launch_local_queue.py`: 한 머신의 여러 GPU에 job TSV를 분배하는 큐 런처.
 - `launch_shared_queue.py`: FARM 공유 스토리지에서 여러 host가 하나의 pending queue를 같이 소비하는 런처.
+- `offload_shared_jobs.py`: FARM shared queue의 pending job을 CPS 같은 별도 스토리지 host로 중복 없이 offload/merge/release하는 유틸.
 - `make_jobs.py`: baseline/pilot/full job TSV 생성기.
 - `jobs_phase0.tsv`: baseline source utility 평가.
 - `jobs_phase0_farm1.tsv`, `jobs_phase0_farm9.tsv`: 중복 실행 방지용 host split.
@@ -118,6 +119,53 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_cps.s
 주의: FARM shared queue가 이미 전체 `300`개를 소비 중이면 CPS split을 동시에 돌리지 않습니다. CPS가 비었고 FARM에서 일부 pending job을 떼어낼 때만 CPS split을 사용합니다.
 
 기본 full sweep 운영은 shared queue launcher를 사용합니다. Host별 split TSV launch script는 shared queue가 깨졌을 때의 recovery/offload용입니다.
+
+FARM shared queue에서 CPS로 job을 옮길 때는 먼저 FARM 큐에서 pending row를 `offloaded`로 잠급니다. 예시는 `8`개 job을 CPS로 넘기는 경우입니다.
+
+```bash
+cd /home/jy/adas/external/V2Xverse
+QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp>
+BATCH=$(date +%Y%m%d_%H%M%S)
+python experiments/v2xverse_codriving_diag/offload_shared_jobs.py claim \
+  --queue-root "$QUEUE_ROOT" \
+  --jobs experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv \
+  --count 8 \
+  --out-jobs experiments/v2xverse_codriving_diag/results/jobs_phase1_full_cps_offload_$BATCH.tsv \
+  --host-id cps \
+  --remote-out-root /data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_full_cps_offload_$BATCH
+scp experiments/v2xverse_codriving_diag/results/jobs_phase1_full_cps_offload_$BATCH.tsv \
+  cps_workstation:/data/adas/e2e/external/V2Xverse/experiments/v2xverse_codriving_diag/jobs_phase1_full_cps_offload_$BATCH.tsv
+```
+
+CPS에서는 복사된 TSV만 실행합니다.
+
+```bash
+cd /data/adas/e2e/external/V2Xverse
+JOB_FILE=experiments/v2xverse_codriving_diag/jobs_phase1_full_cps_offload_$BATCH.tsv \
+OUT_ROOT=/data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_full_cps_offload_$BATCH \
+V2X_GPU_LIST=0 \
+nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh \
+  > /data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_full_cps_offload_$BATCH.log 2>&1 &
+```
+
+CPS 실행이 끝나면 `launcher_status.csv`를 FARM 쪽으로 가져와 shared queue에 merge합니다.
+
+```bash
+scp cps_workstation:/data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_full_cps_offload_$BATCH/launcher_status.csv \
+  /home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/launcher_status_cps_offload_$BATCH.csv
+python experiments/v2xverse_codriving_diag/offload_shared_jobs.py merge \
+  --queue-root "$QUEUE_ROOT" \
+  --launcher-status experiments/v2xverse_codriving_diag/results/launcher_status_cps_offload_$BATCH.csv \
+  --host-id cps
+```
+
+CPS launch 전 문제가 생기면 `release`로 offloaded row를 다시 FARM pending queue에 돌려놓습니다.
+
+```bash
+python experiments/v2xverse_codriving_diag/offload_shared_jobs.py release \
+  --queue-root "$QUEUE_ROOT" \
+  --host-id cps
+```
 
 ## wandb
 
