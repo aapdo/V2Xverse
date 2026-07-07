@@ -183,7 +183,7 @@ python experiments/v2xverse_codriving_diag/offload_shared_jobs.py release \
   --host-id cps
 ```
 
-Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 이미 실행 중인 CPS offload GPU를 제외하고 새 free GPU만 고른 뒤, 기본값으로 GPU마다 독립 batch를 만들어 각 GPU당 `2`개 job을 claim합니다. Launch 후 batch 종료를 blocking wait하지 않고 다음 loop로 돌아가므로, CPS 한쪽 GPU가 먼저 끝나면 다른 GPU의 batch가 아직 running이어도 해당 GPU만 새 job을 다시 claim할 수 있습니다. 매 loop에서 이미 offload된 CPS batch의 `launcher_status.csv`도 확인해 완료된 batch를 FARM shared queue로 merge합니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`, `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`, `V2X_CPS_OFFLOAD_ONE_BATCH_PER_GPU`로 batch depth와 GPU별 batch 분리를 조정합니다.
+Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 이미 실행 중인 CPS offload GPU를 제외하고 새 free GPU만 고른 뒤, 기본값으로 GPU마다 독립 batch를 만들어 각 GPU당 `2`개 job을 claim합니다. Launch 후 batch 종료를 blocking wait하지 않고 다음 loop로 돌아가므로, CPS 한쪽 GPU가 먼저 끝나면 다른 GPU의 batch가 아직 running이어도 해당 GPU만 새 job을 다시 claim할 수 있습니다. 매 loop에서 이미 offload된 CPS batch의 `launcher_status.csv`도 확인해 완료된 batch를 FARM shared queue로 merge합니다. Inactive CPS batch에서 `launcher_status.csv`에 일부 claimed row가 빠진 경우 해당 missing row는 FARM pending queue로 release합니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`, `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`, `V2X_CPS_OFFLOAD_ONE_BATCH_PER_GPU`로 batch depth와 GPU별 batch 분리를 조정합니다.
 
 ```bash
 QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \

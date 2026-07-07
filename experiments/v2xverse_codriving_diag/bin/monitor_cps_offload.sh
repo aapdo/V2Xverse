@@ -127,6 +127,34 @@ release_cps_out() {
   release_batch "$ids_file"
 }
 
+release_missing_cps_status_rows() {
+  local batch="$1"
+  local cps_out="$2"
+  local local_status="$3"
+  local farm_claimed="$LOCAL_TMP/claimed_cps_offload_$batch.ids"
+  local status_ids="$LOCAL_TMP/status_cps_offload_$batch.ids"
+  local missing_ids="$LOCAL_TMP/missing_cps_offload_$batch.ids"
+
+  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && \$8 == \"$cps_out\" {print \$1}' '$QUEUE_ROOT/shared_queue_status.csv'" > "$farm_claimed"
+  if [ ! -s "$farm_claimed" ]; then
+    return
+  fi
+
+  awk -F, 'NR > 1 && $1 != "" {print $1}' "$local_status" | sort -u > "$status_ids"
+  sort -u "$farm_claimed" | comm -23 - "$status_ids" > "$missing_ids"
+  if [ ! -s "$missing_ids" ]; then
+    return
+  fi
+
+  if cps_batch_active "$batch"; then
+    log "CPS recovery batch=$batch has status-missing rows but batch is still active; not releasing"
+    return
+  fi
+
+  log "CPS recovery batch=$batch releasing rows missing from inactive launcher_status"
+  release_batch "$missing_ids"
+}
+
 recover_cps_batches() {
   local batches cps_out batch local_status farm_status
   batches="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && index(\$8, \"$CPS_OFFLOAD_PREFIX\") > 0 {print \$8}' '$QUEUE_ROOT/shared_queue_status.csv' | sort -u" || true)"
@@ -166,6 +194,7 @@ recover_cps_batches() {
     scp "$CPS_HOST:$cps_out/launcher_status.csv" "$local_status" >/dev/null
     scp "$local_status" "$FARM_HOST:$farm_status" >/dev/null
     ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py merge --queue-root '$QUEUE_ROOT' --launcher-status '$farm_status' --host-id cps"
+    release_missing_cps_status_rows "$batch" "$cps_out" "$local_status"
     log "CPS recovery batch=$batch merged"
   done <<< "$batches"
 }
