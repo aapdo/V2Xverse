@@ -16,7 +16,7 @@ select_free_gpus() {
     | awk -F, -v mem="$MEM_LIMIT_MIB" -v util="$UTIL_LIMIT_PCT" -v max="$MAX_GPUS" '
       {
         gsub(/ /, "", $1); gsub(/ /, "", $2); gsub(/ /, "", $3);
-        if ($1 != "0" && $2 <= mem && $3 <= util) {
+        if ($1 != "0" && ($2 + 0) <= (mem + 0) && ($3 + 0) <= (util + 0)) {
           if (count > 0) {
             printf(",");
           }

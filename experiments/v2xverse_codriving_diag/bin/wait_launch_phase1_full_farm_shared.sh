@@ -24,7 +24,7 @@ select_free_gpus() {
       }
       {
         gsub(/ /, "", $1); gsub(/ /, "", $2); gsub(/ /, "", $3);
-        if ((!use_allowed || ok[$1]) && $2 <= mem && $3 <= util) {
+        if ((!use_allowed || ok[$1]) && ($2 + 0) <= (mem + 0) && ($3 + 0) <= (util + 0)) {
           if (count > 0) {
             printf(",");
           }

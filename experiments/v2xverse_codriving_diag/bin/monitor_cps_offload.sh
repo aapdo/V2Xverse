@@ -56,7 +56,7 @@ select_free_gpus() {
     | awk -F, -v min_free="$MIN_FREE_MIB" -v max_used="$MAX_USED_MIB" -v util="$UTIL_LIMIT_PCT" -v max="$MAX_GPUS" -v active="$active_lookup" '
       {
         gsub(/ /, "", $1); gsub(/ /, "", $2); gsub(/ /, "", $3); gsub(/ /, "", $4);
-        if (index(active, "," $1 ",") == 0 && $3 >= min_free && (max_used <= 0 || $2 <= max_used) && $4 <= util) {
+        if (index(active, "," $1 ",") == 0 && ($3 + 0) >= (min_free + 0) && ((max_used + 0) <= 0 || ($2 + 0) <= (max_used + 0)) && ($4 + 0) <= (util + 0)) {
           if (count > 0) {
             printf(",");
           }
