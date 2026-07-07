@@ -147,8 +147,9 @@ launch_objective_queue() {
   if ssh "${SSH_OPTS[@]}" "$FARM_STATUS_HOST" "[ -f '$OBJECTIVE_OUT_ROOT/shared_queue_status.csv' ]"; then
     log "objective queue already exists: $OBJECTIVE_OUT_ROOT"
   else
-    launch_farm_waiters
+    log "objective queue does not exist yet: $OBJECTIVE_OUT_ROOT"
   fi
+  launch_farm_waiters
   launch_postprocess_monitor
   configure_cps_monitor
 }
