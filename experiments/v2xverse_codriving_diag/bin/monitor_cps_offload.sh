@@ -161,6 +161,7 @@ copy_cps_results_to_farm() {
   local cps_out="$2"
   local local_status="$3"
   local ids_file="$LOCAL_TMP/copy_cps_results_$batch.ids"
+  local missing_ids_file="$LOCAL_TMP/copy_cps_results_missing_$batch.ids"
   local ids
 
   awk -F, 'NR > 1 && ($3 == "done" || $3 == "failed") && $1 != "" {print $1}' "$local_status" > "$ids_file"
@@ -168,7 +169,19 @@ copy_cps_results_to_farm() {
     return
   fi
 
-  ids="$(paste -sd' ' "$ids_file")"
+  : > "$missing_ids_file"
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    if ! ssh "${SSH_OPTS[@]}" "$FARM_HOST" "[ -e '$QUEUE_ROOT/$id' ]"; then
+      printf '%s\n' "$id" >> "$missing_ids_file"
+    fi
+  done < "$ids_file"
+  if [ ! -s "$missing_ids_file" ]; then
+    log "CPS recovery batch=$batch copy skipped: finished result dirs already exist on FARM"
+    return
+  fi
+
+  ids="$(paste -sd' ' "$missing_ids_file")"
   log "CPS recovery batch=$batch copying result dirs to FARM: $ids"
   ssh "${SSH_OPTS[@]}" "$CPS_HOST" "cd '$cps_out' && tar -czf - --ignore-failed-read $ids" \
     | ssh "${SSH_STREAM_OPTS[@]}" "$FARM_HOST" "mkdir -p '$QUEUE_ROOT' && tar -xzf - -C '$QUEUE_ROOT'"
