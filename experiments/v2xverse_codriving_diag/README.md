@@ -36,6 +36,7 @@
 - `jobs_phase1_full_farm*.tsv`: static fallback/recovery split.
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
+- `bin/monitor_cps_offload.sh`: SSH로 FARM shared queue와 CPS를 연결해 free CPS GPU에 job을 자동 offload하는 controller용 monitor.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
 
 ## Phase Chaining
@@ -165,6 +166,14 @@ CPS launch 전 문제가 생기면 `release`로 offloaded row를 다시 FARM pen
 python experiments/v2xverse_codriving_diag/offload_shared_jobs.py release \
   --queue-root "$QUEUE_ROOT" \
   --host-id cps
+```
+
+Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다.
+
+```bash
+QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
+nohup bash experiments/v2xverse_codriving_diag/bin/monitor_cps_offload.sh \
+  > experiments/v2xverse_codriving_diag/results/monitor_cps_offload_<stamp>.log 2>&1 &
 ```
 
 ## wandb

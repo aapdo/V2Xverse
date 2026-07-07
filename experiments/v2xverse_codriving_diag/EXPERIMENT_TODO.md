@@ -59,6 +59,7 @@
 - Full phase 1 launchers:
   - FARM shared immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh`
   - FARM shared wait-until-free: `experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh`
+  - CPS cross-storage offload monitor: `experiments/v2xverse_codriving_diag/bin/monitor_cps_offload.sh`
   - FARM2 immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm2.sh`
   - FARM6 immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm6.sh`
   - FARM7 immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm7.sh`
@@ -154,6 +155,7 @@ Execution policy:
 - Static per-host TSVs are fallback/recovery files only. They are not the preferred execution plan because they can leave a server idle after its assigned slice finishes.
 - CPS is optional offload only. Do not run CPS split concurrently while the FARM shared queue contains all `300` jobs, unless those jobs are explicitly removed or marked from the FARM queue first.
 - CPS has separate storage, so it cannot directly join the FARM lock directory. To use CPS safely, first run `offload_shared_jobs.py claim` on FARM to mark pending rows as `offloaded` and write a CPS TSV, copy that TSV to CPS, run `launch_phase1_full_cps.sh` with `JOB_FILE=<offload TSV>`, then merge CPS `launcher_status.csv` back with `offload_shared_jobs.py merge`. If CPS launch is aborted before running, use `offload_shared_jobs.py release --host-id cps`.
+- `bin/monitor_cps_offload.sh` automates the CPS procedure from a controller host that can SSH to both `FARM9` and `cps_workstation`. It waits until CPS GPUs satisfy the free-GPU threshold, claims only that number of pending jobs from the FARM shared queue, launches CPS, merges completion status, then loops.
 
 Default result roots:
 
