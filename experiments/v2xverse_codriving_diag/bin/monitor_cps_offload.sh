@@ -111,7 +111,7 @@ release_batch() {
 
 cps_batch_active() {
   local batch="$1"
-  ssh "${SSH_OPTS[@]}" "$CPS_HOST" "pgrep -af '${CPS_OFFLOAD_PREFIX}_$batch' | grep -E 'launch_phase1_full_cps.sh|launch_local_queue.py|run_planner_diag.py' >/dev/null"
+  ssh "${SSH_OPTS[@]}" "$CPS_HOST" "ps -eo args= | grep -F '${CPS_OFFLOAD_PREFIX}_$batch' | grep -E '[l]aunch_phase1_full_cps.sh|[l]aunch_local_queue.py|[r]un_planner_diag.py' >/dev/null"
 }
 
 release_cps_out() {
@@ -119,7 +119,7 @@ release_cps_out() {
   local cps_out="$2"
   local ids_file="$LOCAL_TMP/release_cps_offload_$batch.ids"
 
-  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && \$8 == \"$cps_out\" {print \$1}' '$QUEUE_ROOT/shared_queue_status.csv'" > "$ids_file"
+  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, -v cps_out='$cps_out' 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") {p=\$8; sub(\"/_launcher_logs/.*\", \"\", p); if (p == cps_out) print \$1}' '$QUEUE_ROOT/shared_queue_status.csv'" > "$ids_file"
   if [ ! -s "$ids_file" ]; then
     log "CPS recovery batch=$batch release skipped: no matching FARM rows"
     return
@@ -136,7 +136,7 @@ release_missing_cps_status_rows() {
   local status_ids="$LOCAL_TMP/status_cps_offload_$batch.ids"
   local missing_ids="$LOCAL_TMP/missing_cps_offload_$batch.ids"
 
-  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && \$8 == \"$cps_out\" {print \$1}' '$QUEUE_ROOT/shared_queue_status.csv'" > "$farm_claimed"
+  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, -v cps_out='$cps_out' 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") {p=\$8; sub(\"/_launcher_logs/.*\", \"\", p); if (p == cps_out) print \$1}' '$QUEUE_ROOT/shared_queue_status.csv'" > "$farm_claimed"
   if [ ! -s "$farm_claimed" ]; then
     return
   fi
@@ -176,7 +176,7 @@ copy_cps_results_to_farm() {
 
 recover_cps_batches() {
   local batches cps_out batch local_status farm_status has_running has_finished
-  batches="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && index(\$8, \"$CPS_OFFLOAD_PREFIX\") > 0 {print \$8}' '$QUEUE_ROOT/shared_queue_status.csv' | sort -u" || true)"
+  batches="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, -v prefix='$CPS_OFFLOAD_PREFIX' 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") {p=\$8; sub(\"/_launcher_logs/.*\", \"\", p); if (index(p, prefix) > 0) print p}' '$QUEUE_ROOT/shared_queue_status.csv' | sort -u" || true)"
   if [ -z "$batches" ]; then
     return
   fi
