@@ -23,13 +23,15 @@
 
 - `run_planner_diag.py`: 단일 setting zero-shot 실행기.
 - `launch_local_queue.py`: 한 머신의 여러 GPU에 job TSV를 분배하는 큐 런처.
+- `launch_shared_queue.py`: FARM 공유 스토리지에서 여러 host가 하나의 pending queue를 같이 소비하는 런처.
 - `make_jobs.py`: baseline/pilot/full job TSV 생성기.
 - `jobs_phase0.tsv`: baseline source utility 평가.
 - `jobs_phase0_farm1.tsv`, `jobs_phase0_farm9.tsv`: 중복 실행 방지용 host split.
 - `jobs_phase1_pilot.tsv`: 대표 shift pilot sweep.
 - `jobs_phase1_pilot_farm1.tsv`, `jobs_phase1_pilot_farm9.tsv`: pilot host split.
 - `jobs_phase1_full.tsv`: full open-loop shift sweep 전체 job.
-- `jobs_phase1_full_farm*.tsv`, `jobs_phase1_full_cps.tsv`: full sweep host split.
+- `jobs_phase1_full_farm_shared.tsv`, `jobs_phase1_full_cps.tsv`: full sweep 기본 split.
+- `jobs_phase1_full_farm*.tsv`: static fallback split.
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
@@ -89,17 +91,18 @@ Full sweep을 돌릴 때:
 
 ```bash
 cd /home/jy/adas/external/V2Xverse
-nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm2.sh \
+export OUT_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp>
+V2X_HOST_TAG=farm2 V2X_GPU_LIST=0,1 nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm2_launcher.log 2>&1 &
-nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm6.sh \
+V2X_HOST_TAG=farm6 V2X_GPU_LIST=0,1,2 nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm6_launcher.log 2>&1 &
-nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm7.sh \
+V2X_HOST_TAG=farm7 V2X_GPU_LIST=0,1,2 nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm7_launcher.log 2>&1 &
-nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm8.sh \
+V2X_HOST_TAG=farm8 V2X_GPU_LIST=0,1,2,3 nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm8_launcher.log 2>&1 &
-nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm9.sh \
+V2X_HOST_TAG=farm9 V2X_GPU_LIST=1,2 nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm9_launcher.log 2>&1 &
-nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm1.sh \
+V2X_HOST_TAG=farm1 V2X_ALLOWED_GPUS=1,2,3 V2X_MIN_GPUS=3 nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh \
   > experiments/v2xverse_codriving_diag/results/phase1_full_farm1_waiter.log 2>&1 &
 ```
 
