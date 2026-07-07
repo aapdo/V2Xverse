@@ -15,6 +15,7 @@ FARM_PYTHON="${FARM_PYTHON:-python3}"
 CPS_RESULTS_ROOT="${CPS_RESULTS_ROOT:-/data/adas/e2e/experiments/v2xverse_codriving_diag/results}"
 LOCAL_TMP="${LOCAL_TMP:-/tmp/v2xverse_cps_offload}"
 SSH_OPTS=(-n -o ConnectTimeout=10)
+SSH_STREAM_OPTS=(-o ConnectTimeout=10)
 
 MIN_FREE_MIB="${V2X_MIN_FREE_MEM_MIB:-20000}"
 MAX_USED_MIB="${V2X_MAX_USED_MEM_MIB:-${V2X_FREE_MEM_LIMIT_MIB:-0}}"
@@ -155,6 +156,24 @@ release_missing_cps_status_rows() {
   release_batch "$missing_ids"
 }
 
+copy_cps_results_to_farm() {
+  local batch="$1"
+  local cps_out="$2"
+  local local_status="$3"
+  local ids_file="$LOCAL_TMP/copy_cps_results_$batch.ids"
+  local ids
+
+  awk -F, 'NR > 1 && ($3 == "done" || $3 == "failed") && $1 != "" {print $1}' "$local_status" > "$ids_file"
+  if [ ! -s "$ids_file" ]; then
+    return
+  fi
+
+  ids="$(paste -sd' ' "$ids_file")"
+  log "CPS recovery batch=$batch copying result dirs to FARM: $ids"
+  ssh "${SSH_OPTS[@]}" "$CPS_HOST" "cd '$cps_out' && tar -czf - --ignore-failed-read $ids" \
+    | ssh "${SSH_STREAM_OPTS[@]}" "$FARM_HOST" "mkdir -p '$QUEUE_ROOT' && tar -xzf - -C '$QUEUE_ROOT'"
+}
+
 recover_cps_batches() {
   local batches cps_out batch local_status farm_status
   batches="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && index(\$8, \"$CPS_OFFLOAD_PREFIX\") > 0 {print \$8}' '$QUEUE_ROOT/shared_queue_status.csv' | sort -u" || true)"
@@ -192,6 +211,7 @@ recover_cps_batches() {
     fi
 
     scp "$CPS_HOST:$cps_out/launcher_status.csv" "$local_status" >/dev/null
+    copy_cps_results_to_farm "$batch" "$cps_out" "$local_status"
     scp "$local_status" "$FARM_HOST:$farm_status" >/dev/null
     ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py merge --queue-root '$QUEUE_ROOT' --launcher-status '$farm_status' --host-id cps"
     release_missing_cps_status_rows "$batch" "$cps_out" "$local_status"
