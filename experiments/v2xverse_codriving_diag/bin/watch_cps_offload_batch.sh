@@ -13,6 +13,7 @@ CPS_RESULTS_ROOT="${CPS_RESULTS_ROOT:-/data/adas/e2e/experiments/v2xverse_codriv
 LOCAL_TMP="${LOCAL_TMP:-/tmp/v2xverse_cps_offload}"
 FARM_PYTHON="${FARM_PYTHON:-python3}"
 POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-300}"
+SSH_OPTS=(-n -o ConnectTimeout=10)
 
 CPS_OUT="$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH"
 LOCAL_STATUS="$LOCAL_TMP/launcher_status_cps_offload_$BATCH.csv"
@@ -34,19 +35,19 @@ release_batch() {
   fi
   local remote_ids="/tmp/$(basename "$LOCAL_IDS")"
   scp "$LOCAL_IDS" "$FARM_HOST:$remote_ids" >/dev/null
-  ssh "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py release --queue-root '$QUEUE_ROOT' --host-id cps --run-id-file '$remote_ids'"
+  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py release --queue-root '$QUEUE_ROOT' --host-id cps --run-id-file '$remote_ids'"
 }
 
 batch_state() {
-  if ssh "$CPS_HOST" "test -f '$CPS_OUT/launcher_status.csv' && grep -q ',running,' '$CPS_OUT/launcher_status.csv'"; then
+  if ssh "${SSH_OPTS[@]}" "$CPS_HOST" "test -f '$CPS_OUT/launcher_status.csv' && grep -q ',running,' '$CPS_OUT/launcher_status.csv'"; then
     echo "running"
     return
   fi
-  if ssh "$CPS_HOST" "test -f '$CPS_OUT/launcher_status.csv' && grep -Eq ',(done|failed),' '$CPS_OUT/launcher_status.csv'"; then
+  if ssh "${SSH_OPTS[@]}" "$CPS_HOST" "test -f '$CPS_OUT/launcher_status.csv' && grep -Eq ',(done|failed),' '$CPS_OUT/launcher_status.csv'"; then
     echo "finished"
     return
   fi
-  if ssh "$CPS_HOST" "pid=\$(cat '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.pid' 2>/dev/null || true); [ -n \"\$pid\" ] && kill -0 \"\$pid\" 2>/dev/null"; then
+  if ssh "${SSH_OPTS[@]}" "$CPS_HOST" "pid=\$(cat '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.pid' 2>/dev/null || true); [ -n \"\$pid\" ] && kill -0 \"\$pid\" 2>/dev/null"; then
     echo "starting"
     return
   fi
@@ -72,10 +73,10 @@ while true; do
   esac
 done
 
-if ssh "$CPS_HOST" "[ -f '$CPS_OUT/launcher_status.csv' ]"; then
+if ssh "${SSH_OPTS[@]}" "$CPS_HOST" "[ -f '$CPS_OUT/launcher_status.csv' ]"; then
   scp "$CPS_HOST:$CPS_OUT/launcher_status.csv" "$LOCAL_STATUS" >/dev/null
   scp "$LOCAL_STATUS" "$FARM_HOST:$FARM_STATUS" >/dev/null
-  ssh "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py merge --queue-root '$QUEUE_ROOT' --launcher-status '$FARM_STATUS' --host-id cps"
+  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py merge --queue-root '$QUEUE_ROOT' --launcher-status '$FARM_STATUS' --host-id cps"
   log "merged CPS offload batch=$BATCH"
 else
   log "missing CPS launcher_status for batch=$BATCH; releasing claimed rows"
