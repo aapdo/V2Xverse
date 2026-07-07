@@ -9,7 +9,7 @@ OUT_ROOT="${OUT_ROOT:?set OUT_ROOT to the active FARM shared queue root}"
 JOB_FILE="${JOB_FILE:-experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv}"
 RESULTS_ROOT="${RESULTS_ROOT:-$FARM_ROOT/experiments/v2xverse_codriving_diag/results}"
 QUEUE_TAG="${V2X_QUEUE_TAG:-$(basename "$OUT_ROOT")}"
-POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-300}"
+POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-60}"
 MEM_LIMIT_MIB="${V2X_FREE_MEM_LIMIT_MIB:-2048}"
 UTIL_LIMIT_PCT="${V2X_FREE_UTIL_LIMIT_PCT:-20}"
 

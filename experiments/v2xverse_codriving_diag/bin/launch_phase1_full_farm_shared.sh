@@ -26,7 +26,7 @@ python experiments/v2xverse_codriving_diag/launch_shared_queue.py \
   --host-id "$HOST_TAG" \
   --workers "${V2X_WORKERS:-0}" \
   --wandb-mode "${WANDB_MODE:-auto}" \
-  --idle-poll-seconds "${V2X_SHARED_IDLE_POLL_SECONDS:-300}" \
+  --idle-poll-seconds "${V2X_SHARED_IDLE_POLL_SECONDS:-60}" \
   "${EXTRA_ARGS[@]}"
 
 python experiments/v2xverse_codriving_diag/aggregate_results.py --root "$OUT_ROOT"

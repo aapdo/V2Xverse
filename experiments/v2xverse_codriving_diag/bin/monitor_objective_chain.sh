@@ -16,7 +16,7 @@ OBJECTIVE_JOB_FILE="${OBJECTIVE_JOB_FILE:-experiments/v2xverse_codriving_diag/jo
 OBJECTIVE_STAMP="${OBJECTIVE_STAMP:-$(date +%Y%m%d_%H%M%S)}"
 OBJECTIVE_OUT_ROOT="${OBJECTIVE_OUT_ROOT:-$FARM_ROOT/experiments/v2xverse_codriving_diag/results/objective_full_farm_shared_$OBJECTIVE_STAMP}"
 RESULTS_ROOT="${FARM_ROOT}/experiments/v2xverse_codriving_diag/results"
-POLL_SECONDS="${V2X_CHAIN_POLL_SECONDS:-300}"
+POLL_SECONDS="${V2X_CHAIN_POLL_SECONDS:-60}"
 START_ON_TAIL_ONLY="${V2X_CHAIN_START_ON_TAIL_ONLY:-1}"
 SSH_OPTS=(-n -o ConnectTimeout=10)
 
@@ -77,7 +77,7 @@ launch_farm_waiter() {
   local gpu="$3"
   local log_path="$RESULTS_ROOT/objective_full_${host_tag}_gpu${gpu}_waiter_$OBJECTIVE_STAMP.log"
   local pid_path="$RESULTS_ROOT/objective_full_${host_tag}_gpu${gpu}_waiter_$OBJECTIVE_STAMP.pid"
-  ssh "${SSH_OPTS[@]}" "$ssh_host" "if [ -f '$pid_path' ] && kill -0 \$(cat '$pid_path') 2>/dev/null; then exit 0; fi; cd '$FARM_ROOT' || exit 1; JOB_FILE='$OBJECTIVE_JOB_FILE' OUT_ROOT='$OBJECTIVE_OUT_ROOT' V2X_HOST_TAG='$host_tag' V2X_ALLOWED_GPUS='$gpu' V2X_MIN_GPUS='1' V2X_MAX_GPUS='1' V2X_WAIT_FOR_EXISTING_SHARED_LAUNCHER='0' nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh > '$log_path' 2>&1 < /dev/null & echo \$! > '$pid_path'"
+  ssh "${SSH_OPTS[@]}" "$ssh_host" "if [ -f '$pid_path' ] && kill -0 \$(cat '$pid_path') 2>/dev/null; then exit 0; fi; cd '$FARM_ROOT' || exit 1; JOB_FILE='$OBJECTIVE_JOB_FILE' OUT_ROOT='$OBJECTIVE_OUT_ROOT' V2X_HOST_TAG='$host_tag' V2X_ALLOWED_GPUS='$gpu' V2X_MIN_GPUS='1' V2X_MAX_GPUS='1' V2X_GPU_POLL_SECONDS='${V2X_GPU_POLL_SECONDS:-60}' V2X_WAIT_FOR_EXISTING_SHARED_LAUNCHER='0' nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh > '$log_path' 2>&1 < /dev/null & echo \$! > '$pid_path'"
   log "ensured objective $host_tag waiter gpu=$gpu"
 }
 
@@ -132,7 +132,7 @@ launch_current_cps_recovery_monitor() {
     export V2X_CPS_OFFLOAD_PREFIX="$CURRENT_CPS_PREFIX"
     export FARM_HOST="${FARM_STATUS_HOST}"
     export CPS_HOST="${CPS_HOST:-cps_workstation}"
-    export V2X_GPU_POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-300}"
+    export V2X_GPU_POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-60}"
     export V2X_MAX_GPUS="${V2X_MAX_GPUS:-2}"
     export V2X_MIN_FREE_MEM_MIB="${V2X_MIN_FREE_MEM_MIB:-20000}"
     export V2X_CPS_OFFLOAD_JOBS_PER_GPU="${V2X_CPS_OFFLOAD_JOBS_PER_GPU:-1}"
