@@ -86,7 +86,7 @@ Purpose: validate representative physical/corruption families before launching t
 - [x] `camera_crash/s3/rsu_shifted_only`
 - [x] `color_quant/s3/rsu_shifted_only`
 - [x] `jpeg/s3/rsu_shifted_only`
-- [ ] `compound_avail/mid/all_shifted`
+- [x] `compound_avail/mid/all_shifted`
 - [ ] `compound_lcf/mid/all_shifted`
 - [ ] `compound_photo_comm/mid/all_shifted`
 
@@ -151,4 +151,4 @@ Each launcher root should contain:
 - [x] Confirm first CPS phase 1 sample reaches `progress 25/...`.
 - [x] Commit and push every harness/doc change before relying on CPS, because FARM and CPS use separate storage.
 
-Last checked: 2026-07-07 07:50 KST. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` remains at launcher status `done=3,running=3`: completed jobs are `latency_det/s1/all_shifted`, `latency_det/s3/all_shifted`, and `latency_jitter/s3/all_shifted`; running jobs are `latency_jitter/stress/rsu_shifted_only` at `progress 600/3560`, `frame_lost_hold/s2/rsu_shifted_only` at `progress 550/3560`, and `frame_lost_hold/s2/vehicle_shifted_only` at `progress 525/3560`. FARM9 phase1 pilot root `phase1_pilot_farm9_20260706_181437` remains at launcher status `done=4,running=2`, with `compound_avail/mid/all_shifted` at `progress 1125/3560` and `compound_lcf/mid/all_shifted` at `progress 775/3560`. CPS watcher PID `2611377` remains active; CPS phase1 root `phase1_pilot_cps_20260707_025118` completed duplicate `latency_det/s3/all_shifted` cleanly, increased `summary.json` count to 2, and launched duplicate `latency_jitter/s3/all_shifted`, which reached `progress 100/3560`. The only recent matching lines are non-fatal delayed-source replacement warnings.
+Last checked: 2026-07-07 09:10 KST. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` remains at launcher status `done=3,running=3`: completed jobs are `latency_det/s1/all_shifted`, `latency_det/s3/all_shifted`, and `latency_jitter/s3/all_shifted`; running jobs are `latency_jitter/stress/rsu_shifted_only` at `progress 2100/3560`, `frame_lost_hold/s2/rsu_shifted_only` at `progress 2200/3560`, and `frame_lost_hold/s2/vehicle_shifted_only` at `progress 2150/3560`. FARM9 phase1 pilot root `phase1_pilot_farm9_20260706_181437` advanced to launcher status `done=5,running=2`: `compound_avail/mid/all_shifted` completed cleanly and `compound_photo_comm/mid/all_shifted` launched on GPU 2, reaching `progress 50/3560`; `compound_lcf/mid/all_shifted` remains running at `progress 2500/3560`. CPS watcher PID `2611377` remains active; CPS phase1 root `phase1_pilot_cps_20260707_025118` remains at status `done=2,running=1`, with duplicate `latency_jitter/s3/all_shifted` at `progress 2150/3560`. The only recent matching lines are non-fatal delayed-source replacement warnings.
