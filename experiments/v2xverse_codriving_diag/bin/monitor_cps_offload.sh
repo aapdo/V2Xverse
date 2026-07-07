@@ -258,7 +258,7 @@ launch_cps_batch() {
   fi
 
   log "launching CPS offload batch=$batch on GPUs=$batch_gpus"
-  if ! ssh "${SSH_OPTS[@]}" "$CPS_HOST" "cd '$CPS_ROOT' && mkdir -p '$CPS_RESULTS_ROOT' && JOB_FILE='$cps_jobs' OUT_ROOT='$cps_out' V2X_GPU_LIST='$batch_gpus' nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh > '$CPS_RESULTS_ROOT/${CPS_OFFLOAD_PREFIX}_$batch.log' 2>&1 & echo \$! > '$CPS_RESULTS_ROOT/${CPS_OFFLOAD_PREFIX}_$batch.pid'"; then
+  if ! ssh "${SSH_OPTS[@]}" "$CPS_HOST" "cd '$CPS_ROOT' || exit 1; mkdir -p '$CPS_RESULTS_ROOT' || exit 1; JOB_FILE='$cps_jobs' OUT_ROOT='$cps_out' V2X_GPU_LIST='$batch_gpus' nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh > '$CPS_RESULTS_ROOT/${CPS_OFFLOAD_PREFIX}_$batch.log' 2>&1 < /dev/null & echo \$! > '$CPS_RESULTS_ROOT/${CPS_OFFLOAD_PREFIX}_$batch.pid'"; then
     log "failed to launch CPS offload batch=$batch; releasing claimed rows"
     release_batch "$local_ids"
     return 1
