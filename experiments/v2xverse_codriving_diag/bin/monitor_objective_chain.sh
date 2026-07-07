@@ -39,7 +39,10 @@ PY"
 
 queue_drained() {
   local counts active
-  counts="$(queue_counts)"
+  if ! counts="$(queue_counts)" || [ -z "$counts" ]; then
+    log "current queue count check failed or returned empty; retrying"
+    return 1
+  fi
   active="$(awk -F= '$1=="pending" || $1=="running" || $1=="offloaded" {s += $2} END {print s+0}' <<< "$counts")"
   log "current queue counts: ${counts//$'\n'/ }"
   [ "$active" -eq 0 ]
