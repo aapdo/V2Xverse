@@ -176,6 +176,13 @@ nohup bash experiments/v2xverse_codriving_diag/bin/monitor_cps_offload.sh \
   > experiments/v2xverse_codriving_diag/results/monitor_cps_offload_<stamp>.log 2>&1 &
 ```
 
+현재 controller Mac에서는 LaunchAgent로 monitor를 올려 둡니다.
+
+```bash
+launchctl print gui/$(id -u)/com.jy.v2x.cps-offload
+tail -f /tmp/v2x_cps_offload_monitor_launchd.log
+```
+
 ## wandb
 
 기본값은 `WANDB_MODE=auto`입니다.
