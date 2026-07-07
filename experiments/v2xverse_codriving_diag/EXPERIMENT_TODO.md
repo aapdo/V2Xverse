@@ -144,16 +144,13 @@ Job file:
 - `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm8.tsv`
 - `experiments/v2xverse_codriving_diag/jobs_phase1_full_cps.tsv`
 
-Machine split:
+Execution policy:
 
 - FARM shared queue is the default execution mode for FARM hosts. FARM2/6/7/8/9 and later FARM1 all consume the same `300` pending-job queue, so a faster or earlier-freed host automatically takes more work.
-- FARM8: `66` jobs on GPUs `0,1,2,3`.
-- FARM6: `50` jobs on GPUs `0,1,2`.
-- FARM7: `50` jobs on GPUs `0,1,2`.
-- FARM1: `50` jobs on GPUs `1,2,3` after the remaining pilot jobs finish; GPU `0` remains reserved.
-- FARM2: `33` jobs on GPUs `0,1`.
-- FARM9: `33` jobs on GPUs `1,2`; GPU `0` remains reserved.
-- CPS: optional offload only. Do not run CPS split concurrently while the FARM shared queue contains all `300` jobs, unless those jobs are explicitly removed or marked from the FARM queue first.
+- Active FARM GPU plan: FARM8 GPUs `0,1,2,3`; FARM6 GPUs `0,1,2`; FARM7 GPUs `0,1,2`; FARM2 GPUs `0,1`; FARM9 GPUs `1,2`; FARM1 GPUs `1,2,3` only after the remaining pilot jobs finish.
+- FARM1 GPU `0` and FARM9 GPU `0` remain reserved.
+- Static per-host TSVs are fallback/recovery files only. They are not the preferred execution plan because they can leave a server idle after its assigned slice finishes.
+- CPS is optional offload only. Do not run CPS split concurrently while the FARM shared queue contains all `300` jobs, unless those jobs are explicitly removed or marked from the FARM queue first.
 
 Default result roots:
 
@@ -278,4 +275,4 @@ Each launcher root should contain:
 - [x] Confirm first CPS phase 1 sample reaches `progress 25/...`.
 - [x] Commit and push every harness/doc change before relying on CPS, because FARM and CPS use separate storage.
 
-Last checked: 2026-07-07 12:18 KST. Static FARM full launchers were stopped and replaced by the shared FARM queue. Shared FARM full root is `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_20260707_121317`; status file is `shared_queue_status.csv`. Active shared queue workers: FARM2 PID `82647` on GPUs `0,1`, FARM6 PID `80615` on GPUs `0,1,2`, FARM7 PID `80720` on GPUs `0,1,2`, FARM8 PID `82126` on GPUs `0,1,2,3`, FARM9 PID `44229` on GPUs `1,2`; FARM1 shared waiter PID `88385` waits for GPUs `1,2,3` after pilot completion. Shared queue status remains `running=14,pending=268`; jobs have reached at least `progress 100/3560`. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` remains at `done=6,running=3`, so FARM1 has not joined the shared full queue yet. CPS duplicate pilot process is no longer active; CPS full waiter PID `2740454` was stopped and its stale pidfile removed because CPS full launch before pilot/smoke clearance is not authorized by the monitor policy. No CPS full root exists. Recent V2XVerse matching warning lines are non-fatal delayed-source replacement warnings.
+Last checked: 2026-07-07 12:21 KST. The earlier shared root `phase1_full_farm_shared_20260707_121317` was stopped because it was generated before CPS-offload removal and covered only the FARM slice. It was replaced by the full `300`-job shared FARM queue at `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_20260707_122043`; status file is `shared_queue_status.csv`. Active shared queue workers: FARM2 PID `83489` on GPUs `0,1`, FARM6 PID `81591` on GPUs `0,1,2`, FARM7 PID `81698` on GPUs `0,1,2`, FARM8 PID `83242` on GPUs `0,1,2,3`, FARM9 PID `44934` on GPUs `1,2`; FARM1 shared waiter PID `89159` waits for GPUs `1,2,3` after pilot completion. Initial shared queue status is `running=14,pending=286`. FARM1 phase1 pilot root `phase1_pilot_farm1_20260706_183438` remains at `running=3`, so FARM1 has not joined the shared full queue yet. CPS duplicate pilot/full processes are not active; CPS is held as optional offload only while FARM shared queue owns all `300` jobs.

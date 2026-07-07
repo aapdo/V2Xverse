@@ -30,9 +30,9 @@
 - `jobs_phase1_pilot.tsv`: 대표 shift pilot sweep.
 - `jobs_phase1_pilot_farm1.tsv`, `jobs_phase1_pilot_farm9.tsv`: pilot host split.
 - `jobs_phase1_full.tsv`: full open-loop shift sweep 전체 job.
-- `jobs_phase1_full_farm_shared.tsv`: FARM 공유 queue용 full sweep 전체 `300`개 job.
+- `jobs_phase1_full_farm_shared.tsv`: FARM 공유 queue용 full sweep 전체 `300`개 job. FARM hosts가 같은 pending list에서 다음 job을 claim하므로 먼저 끝난 서버가 자동으로 더 가져간다.
 - `jobs_phase1_full_cps.tsv`: CPS가 실제로 비어 있을 때 offload할 수 있는 optional split.
-- `jobs_phase1_full_farm*.tsv`: static fallback split.
+- `jobs_phase1_full_farm*.tsv`: static fallback/recovery split.
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
@@ -88,7 +88,7 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_pilot_cps.
 
 기본 free GPU 기준은 memory used `<=2048MiB`, utilization `<=20%`입니다. 필요하면 `V2X_FREE_MEM_LIMIT_MIB`, `V2X_FREE_UTIL_LIMIT_PCT`, `V2X_MAX_GPUS`로 조정합니다.
 
-Full sweep을 돌릴 때:
+Full sweep을 돌릴 때 기본 방식은 FARM shared queue입니다. 정적으로 host별 job 수를 고정하지 않고, FARM2/6/7/8/9와 나중에 비는 FARM1이 같은 `300`개 pending queue를 소비합니다.
 
 ```bash
 cd /home/jy/adas/external/V2Xverse
@@ -117,7 +117,7 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_cps.s
 
 주의: FARM shared queue가 이미 전체 `300`개를 소비 중이면 CPS split을 동시에 돌리지 않습니다. CPS가 비었고 FARM에서 일부 pending job을 떼어낼 때만 CPS split을 사용합니다.
 
-기본 launch script는 host별 split TSV를 사용합니다. 전체 TSV를 한 머신에서 돌리고 싶으면 `JOB_FILE`을 override합니다.
+기본 full sweep 운영은 shared queue launcher를 사용합니다. Host별 split TSV launch script는 shared queue가 깨졌을 때의 recovery/offload용입니다.
 
 ## wandb
 
