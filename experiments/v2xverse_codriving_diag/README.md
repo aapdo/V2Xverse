@@ -17,13 +17,14 @@
   - planner: `checkpoints/codriving/planner/codriving_planner.ckpt`
 - FARM1 GPU 0과 FARM9 GPU 0은 사용하지 않는다.
 - CPS는 dataset mirror가 준비되어 있지만, 현재 GPU free memory/utilization 기준을 만족할 때만 FARM shared queue에서 job을 offload한다.
+- Full/objective sweep은 정적 split ownership으로 운영하지 않는다. Host별 TSV는 fallback/recovery용이고, 실제 실행은 shared queue와 CPS one-job lease로 idle GPU가 계속 다음 pending job을 가져가는 방식이다.
 - `launch_phase0_farm*.sh`는 phase 0가 모두 성공하면 자동으로 phase 1 pilot을 이어서 실행한다. 실패가 있으면 `set -e`로 중단되어 phase 1은 시작하지 않는다.
 
 ## 파일
 
 - `run_planner_diag.py`: 단일 setting zero-shot 실행기.
 - `launch_local_queue.py`: 한 머신의 여러 GPU에 job TSV를 분배하는 큐 런처.
-- `launch_shared_queue.py`: FARM 공유 스토리지에서 여러 host가 하나의 pending queue를 같이 소비하는 런처.
+- `launch_shared_queue.py`: FARM 공유 스토리지에서 여러 host가 하나의 pending queue를 같이 소비하는 런처. `--idle-poll-seconds`를 켜면 pending이 잠깐 없어도 running/offloaded row가 남아 있는 동안 worker가 살아 있다가 반납된 job을 다시 claim한다.
 - `offload_shared_jobs.py`: FARM shared queue의 pending job을 CPS 같은 별도 스토리지 host로 중복 없이 offload/merge/release하는 유틸.
 - `enrich_planning_deltas.py`: phase0 baseline을 기준으로 planning CSV에 delta/worse/coop-state columns를 후처리로 추가하는 유틸.
 - `make_best_single_source.py`: 완료된 `clean_rsu_only`/`clean_vehicle_only` 결과에서 sample별 lower-ADE source를 골라 empirical `clean_best_single_source` baseline artifact를 만드는 유틸.
@@ -99,6 +100,8 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_pilot_cps.
 기본 free GPU 기준은 memory free `>=20000MiB`, utilization `<=20%`입니다. 필요하면 `V2X_MIN_FREE_MEM_MIB`, `V2X_MAX_USED_MEM_MIB`, `V2X_FREE_UTIL_LIMIT_PCT`, `V2X_MAX_GPUS`로 조정합니다.
 
 Full sweep을 돌릴 때 기본 방식은 FARM shared queue입니다. 정적으로 host별 job 수를 고정하지 않고, FARM2/6/7/8/9와 나중에 비는 FARM1이 같은 pending queue를 소비합니다. 먼저 끝난 host/GPU worker가 다음 pending row를 계속 claim하므로, 특정 서버에 미리 배정된 몫이 끝났다고 놀지 않습니다.
+
+재분배 원칙은 다음과 같습니다. FARM 쪽은 같은 `shared_queue_status.csv`를 보므로 완료가 빠른 GPU가 바로 다음 pending row를 가져갑니다. CPS 쪽은 `/data`가 별도라 직접 lock을 공유하지 않고, monitor가 free GPU마다 FARM pending row를 `offloaded`로 lease한 뒤 CPS에서 실행하고 완료 결과를 FARM root로 복사/merge합니다. FARM worker는 기본 `V2X_SHARED_IDLE_POLL_SECONDS=300`으로 큐가 완전히 끝나기 전까지 종료하지 않으므로, CPS 실패/release 등으로 pending row가 다시 생겨도 idle FARM GPU가 다시 붙을 수 있습니다.
 
 ```bash
 cd /home/jy/adas/external/V2Xverse

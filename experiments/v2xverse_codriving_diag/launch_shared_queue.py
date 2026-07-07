@@ -122,6 +122,17 @@ def claim_job(args, gpu, jobs_by_id):
     return None, None
 
 
+def queue_counts(args):
+    status_path = Path(args.out_root) / "shared_queue_status.csv"
+    lock_path = Path(args.out_root) / "shared_queue.lock"
+    counts = {}
+    with DirLock(lock_path, args.lock_stale_seconds):
+        for row in read_status(status_path):
+            status = row.get("status", "")
+            counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
 def finish_job(args, run_id, rc):
     status_path = Path(args.out_root) / "shared_queue_status.csv"
     lock_path = Path(args.out_root) / "shared_queue.lock"
@@ -140,6 +151,13 @@ def worker(gpu, args, jobs_by_id):
     while True:
         job, log_path = claim_job(args, gpu, jobs_by_id)
         if job is None:
+            if args.idle_poll_seconds > 0:
+                counts = queue_counts(args)
+                if counts.get("pending", 0) > 0:
+                    continue
+                if counts.get("running", 0) > 0 or counts.get("offloaded", 0) > 0:
+                    time.sleep(args.idle_poll_seconds)
+                    continue
             return
         run_id = job["run_id"]
         env = os.environ.copy()
@@ -179,6 +197,7 @@ def parse_args():
     parser.add_argument("--omp-threads", type=int, default=8)
     parser.add_argument("--save-waypoints", action="store_true")
     parser.add_argument("--lock-stale-seconds", type=int, default=600)
+    parser.add_argument("--idle-poll-seconds", type=int, default=0)
     return parser.parse_args()
 
 

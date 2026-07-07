@@ -8,6 +8,7 @@
 - FARM1 GPU 0 and FARM9 GPU 0 are reserved and must not be used.
 - FARM machines share `/home/jy/adas/external/V2Xverse`; CPS uses separate `/data` storage.
 - Execution must be queue-based, not a fixed static split. Any FARM host/GPU that becomes free should keep claiming the next pending row from the shared queue. CPS cannot share the lock directory directly, so it participates through monitored one-job offload leases from the same FARM queue.
+- Split TSVs are planning/fallback artifacts only. They must not be interpreted as permanent ownership; if FARM or CPS becomes idle while any queue still has pending work, the idle side should be reattached by shared-queue claiming or CPS offload leasing.
 
 ## 1. Machine Layout
 
@@ -90,6 +91,7 @@
 - Primary FARM execution is `launch_shared_queue.py` against one `shared_queue_status.csv`, not host-local fixed slices. FARM2/6/7/8/9 and later free FARM1 GPUs all claim from the same pending list.
 - Current FARM GPU pool for the shared queue is FARM2 GPUs `0,1`, FARM6 GPUs `0,1,2`, FARM7 GPUs `0,1,2`, FARM8 GPUs `0,1,2,3`, FARM9 GPUs `1,2`, and FARM1 GPUs `1,2,3` as they become available after pilot jobs. FARM1 GPU `0` and FARM9 GPU `0` stay reserved.
 - Per-host full-sweep TSVs (`jobs_phase1_full_farm*.tsv`) are fallback/recovery artifacts only. They should not be used as the normal execution plan while the shared queue is healthy, because static slices can leave a host idle while other hosts still have work.
+- FARM shared workers now run with `V2X_SHARED_IDLE_POLL_SECONDS=300` by default. If a worker sees no pending row but the queue still has `running` or `offloaded` rows, it waits instead of exiting; this lets idle FARM GPUs claim jobs that later return to `pending` after CPS release/recovery.
 - CPS participates through `bin/monitor_cps_offload.sh`: it marks FARM pending rows as `offloaded`, copies a tiny TSV to `/data`, runs the job on a free CPS GPU, copies completed result directories back to the FARM result root, and merges `launcher_status.csv` into the shared queue.
 - CPS batch depth should stay at the default `V2X_CPS_OFFLOAD_JOBS_PER_GPU=1` for this sweep. That makes each CPS GPU lease one job at a time, so if one CPS GPU finishes first it immediately claims another FARM pending job without waiting for the other CPS GPU.
 - The objective chain uses the same policy: after the current `300`-job queue drains, `bin/monitor_objective_chain.sh` launches `jobs_objective_full.tsv` (`428` jobs) as a new shared FARM queue and rewires the CPS offload monitor to claim from that objective queue.
@@ -183,6 +185,7 @@ Job file:
 Execution policy:
 
 - FARM shared queue is the default execution mode for FARM hosts. FARM2/6/7/8/9 and later FARM1 all consume the same `300` pending-job queue, so a faster or earlier-freed host automatically takes more work.
+- Work stealing is the operating rule: the count split can be used to inspect expected load, but actual execution ownership remains in `shared_queue_status.csv`. A host that finishes its current job should either claim the next FARM pending row or, for CPS, receive a new one-job offload lease from the monitor.
 - Active FARM GPU plan: FARM8 GPUs `0,1,2,3`; FARM6 GPUs `0,1,2`; FARM7 GPUs `0,1,2`; FARM2 GPUs `0,1`; FARM9 GPUs `1,2`; FARM1 GPUs `1,2,3` only after the remaining pilot jobs finish.
 - FARM1 GPU `0` and FARM9 GPU `0` remain reserved.
 - Static per-host TSVs are fallback/recovery files only. They are not the preferred execution plan because they can leave a server idle after its assigned slice finishes.
