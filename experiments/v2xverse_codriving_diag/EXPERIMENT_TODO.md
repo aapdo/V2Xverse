@@ -44,7 +44,16 @@
 - FARM phase 1 pilot split jobs:
   - `experiments/v2xverse_codriving_diag/jobs_phase1_pilot_farm1.tsv`
   - `experiments/v2xverse_codriving_diag/jobs_phase1_pilot_farm9.tsv`
-- Full phase 1 sweep candidates: `experiments/v2xverse_codriving_diag/jobs_phase1_full.tsv`
+- Full phase 1 sweep jobs: `experiments/v2xverse_codriving_diag/jobs_phase1_full.tsv`
+- Full phase 1 machine splits:
+  - FARM9: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm9.tsv` (`125` jobs)
+  - FARM1: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm1.tsv` (`125` jobs)
+  - CPS: `experiments/v2xverse_codriving_diag/jobs_phase1_full_cps.tsv` (`50` jobs)
+- Full phase 1 launchers:
+  - FARM9 immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm9.sh`
+  - FARM1 wait-until-free: `experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm1.sh`
+  - CPS immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh`
+  - CPS wait-until-free: `experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_cps.sh`
 
 ## 3. Phase 0 Baselines
 
@@ -115,12 +124,105 @@ Purpose: run the complete source-aware physical/corruption diagnostic once pilot
 Job file:
 
 - `experiments/v2xverse_codriving_diag/jobs_phase1_full.tsv`
+- `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm9.tsv`
+- `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm1.tsv`
+- `experiments/v2xverse_codriving_diag/jobs_phase1_full_cps.tsv`
+
+Machine split:
+
+- FARM9: `125` jobs on GPUs `1,2`; GPU `0` remains reserved.
+- FARM1: `125` jobs on GPUs `1,2,3` after the remaining pilot jobs finish; GPU `0` remains reserved.
+- CPS: `50` jobs on the first free GPU, normally GPU `0` after the duplicate pilot process is stopped.
+
+Default result roots:
+
+- FARM9: `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm9_<stamp>`
+- FARM1: `/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm1_<stamp>`
+- CPS: `/data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_full_cps_<stamp>`
 
 Recommended execution policy:
 
 - Start with `V2X_MAX_SAMPLES=128` smoke on one free GPU.
 - If every pilot/full-smoke job produces `summary.json`, remove `V2X_MAX_SAMPLES` and run full dataset.
 - Aggregate each machine root immediately after completion.
+
+Current executable full sweep covers `300` jobs:
+
+- `24` non-compound families x `4` severities x `3` modes = `288` jobs.
+- `3` compound families x `4` severities x `1` mode = `12` jobs.
+
+Original objective coverage notes:
+
+- Naming aliases currently used by the harness:
+  - `clean_cav_only` -> `clean_vehicle_only`
+  - `null_rsu_only_cav_clean` -> `null_rsu_only`
+  - `null_cav_only_rsu_clean` -> `null_vehicle_only`
+  - `cav_shifted_only_rsu_clean` -> `vehicle_shifted_only`
+  - `packet_drop_input` -> `packet_drop`
+- Already executable: `latency_det`, `latency_jitter`, `frame_lost_hold`, `packet_drop`, `bandwidth_cap`, FOV loss families, `camera_crash`, `pose_noise`, photometric/weather corruptions, and current compound families.
+- Hook/job backlog for the exact original objective:
+  - `clean_best_single_source`
+  - `one_source_null_one_clean`
+  - `topk_feature_cap`
+  - `request_region_cap`
+  - `pose_bias`
+  - `pose_drift`
+  - `calibration`
+  - source-combination modes such as `shifted_source_full_clean_source_limited` and `clean_source_full_shifted_source_limited`
+
+## 5.1 Original Stage Plan
+
+This is the user-requested target plan from the goal objective. The current executable full sweep starts with the implemented subset above; the hook backlog must be added before claiming complete coverage of every item below.
+
+- Stage 0 baseline/logging sanity:
+  - `ego_only`
+  - `clean_all`
+  - `clean_rsu_only`
+  - `clean_cav_only`
+  - `clean_best_single_source`
+  - `null_all_image`
+  - `null_all_missing_flag`
+  - `null_rsu_only_cav_clean`
+  - `null_cav_only_rsu_clean`
+- Stage 1 high-yield screening:
+  - `latency_jitter_s3`, `latency_jitter_stress`
+  - `frame_lost_hold_s2`, `frame_lost_hold_s3`, `frame_lost_hold_stress`
+  - `packet_drop_s3`, `packet_drop_stress`
+  - `fov_left_loss_s3`
+  - `fov_right_loss_s2`, `fov_right_loss_s3`
+  - `missing_camera_s2`, `missing_camera_s3`
+  - `camera_crash_s2`, `camera_crash_s3`
+  - modes: `all_shifted`, `rsu_shifted_only_cav_clean`, `cav_shifted_only_rsu_clean`
+- Stage 2 full severity sweep for top families:
+  - families: `latency_jitter`, `frame_lost_hold`, `packet_drop_input`, `fov_left_loss`, `fov_right_loss`, `missing_camera`, `camera_crash`, `latency_det`
+  - severities: `s1`, `s2`, `s3`, `stress`
+  - modes: `all_shifted`, `rsu_shifted_only_cav_clean`, `cav_shifted_only_rsu_clean`, `one_source_null_one_clean`
+- Stage 3 bandwidth and request-map sweep:
+  - families: `bandwidth_cap`, `topk_feature_cap`, `request_region_cap`
+  - severities: `s1`, `s2`, `s3`, `stress`
+  - modes: `all_sources_limited`, `rsu_limited_cav_full`, `cav_limited_rsu_full`, `shifted_source_full_clean_source_limited`, `clean_source_full_shifted_source_limited`
+- Stage 4 pose/calibration protocol sweep:
+  - families: `pose_noise`, `pose_bias`, `pose_drift`, `calibration`
+  - severities: `s1`, `s2`, `s3`, `stress`
+  - modes: `all_shifted`, `rsu_shifted_only_cav_clean`, `cav_shifted_only_rsu_clean`
+- Stage 5 photometric full sweep:
+  - families: `color_quant`, `resolution`, `jpeg`, `motion_blur`, `defocus_blur`, `darkness`, `brightness`, `contrast`, `fog`, `rain`, `snow`
+  - severities: `s1`, `s2`, `s3`, `stress`
+  - modes: `all_shifted`, `rsu_shifted_only_cav_clean`, `cav_shifted_only_rsu_clean`
+- Stage 6 compound selected sweep:
+  - `compound_availability`: `latency_jitter + frame_lost_hold + packet_drop`
+  - `compound_physical`: `latency + pose/calib + FOV`
+  - `compound_photo_comm`: `photometric + bandwidth cap or frame lost`
+  - modes: `all_shifted`, `rsu_shifted_only_cav_clean`, `cav_shifted_only_rsu_clean`
+
+## 5.2 Mandatory Logging Target
+
+Every open-loop run should ultimately log the fields below. Current files already cover the core planning fields and a subset of per-agent audit fields; the remaining communication/request-map, route-corridor, and delta-vs-baseline fields are backlog items.
+
+- Planning: `sample_id`, `scenario_id`, `frame_id`, `setting`, `shift_family`, `severity`, `application_mode`, `shift_seed`, `ADE`, `FDE`, `ADE@1s`, `ADE@2s`, `ADE@3s`, `ADE@4s`, `FDE@final`, `delta_ADE_vs_clean_all`, `delta_ADE_vs_ego`, `delta_ADE_vs_null_all`, `delta_ADE_vs_clean_best_single_source`, `worse_than_clean_all`, `worse_than_ego`, `worse_than_null_all`, `worse_than_clean_best_single_source`, `delta_ADE_gt_0p2`, `delta_ADE_gt_0p5`, `delta_ADE_gt_1p0`.
+- Perception: `mAP`, `AP_vehicle`, `AP_pedestrian`, `AP_cyclist`, `AP30`, `AP50`, `AP70`, `recall_vehicle`, `recall_pedestrian`, `precision_vehicle`, `precision_pedestrian`, `num_gt_vehicle`, `num_pred_vehicle`, `num_tp_vehicle`, `num_fp_vehicle`, `num_fn_vehicle`, `AP_near_gt_traj_5m`, `recall_near_gt_traj_5m`, `FN_near_gt_traj_5m`, `AP_route_corridor`, `recall_route_corridor`.
+- Communication/request map: `agent_id`, `agent_type`, `agent_shifted`, `agent_selected`, `source_selected_by_request`, `source_attention_weight`, `source_fusion_weight`, `tx_bytes`, `tx_kb`, `num_transmitted_features`, `num_transmitted_tokens`, `num_selected_regions`, `bandwidth_budget`, `bandwidth_used_ratio`, `request_map_mean`, `request_map_max`, `request_map_entropy`, `request_topk_overlap_gt_future`, `request_topk_overlap_route`, `request_topk_overlap_near_actor`.
+- Transform audit: `delay_frames`, `delay_ms`, `held_frame_age`, `frame_lost_flag`, `packet_drop_flag`, `drop_burst_length`, `camera_crash_flag`, `valid_camera_count`, `fov_keep_ratio`, `masked_side`, `masked_pixel_ratio`, `route_corridor_masked_ratio`, `pose_error_m`, `yaw_error_deg`, `calib_translation_error_m`.
 
 ## 6. Logs and Outputs
 

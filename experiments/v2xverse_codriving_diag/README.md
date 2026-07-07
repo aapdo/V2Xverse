@@ -28,7 +28,8 @@
 - `jobs_phase0_farm1.tsv`, `jobs_phase0_farm9.tsv`: 중복 실행 방지용 host split.
 - `jobs_phase1_pilot.tsv`: 대표 shift pilot sweep.
 - `jobs_phase1_pilot_farm1.tsv`, `jobs_phase1_pilot_farm9.tsv`: pilot host split.
-- `jobs_phase1_full.tsv`: full open-loop shift sweep 후보.
+- `jobs_phase1_full.tsv`: full open-loop shift sweep 전체 job.
+- `jobs_phase1_full_farm9.tsv`, `jobs_phase1_full_farm1.tsv`, `jobs_phase1_full_cps.tsv`: full sweep host split.
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
@@ -83,6 +84,24 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_pilot_cps.
 ```
 
 기본 free GPU 기준은 memory used `<=2048MiB`, utilization `<=20%`입니다. 필요하면 `V2X_FREE_MEM_LIMIT_MIB`, `V2X_FREE_UTIL_LIMIT_PCT`, `V2X_MAX_GPUS`로 조정합니다.
+
+Full sweep을 돌릴 때:
+
+```bash
+cd /home/jy/adas/external/V2Xverse
+nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm9.sh \
+  > experiments/v2xverse_codriving_diag/results/phase1_full_farm9_launcher.log 2>&1 &
+nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm1.sh \
+  > experiments/v2xverse_codriving_diag/results/phase1_full_farm1_waiter.log 2>&1 &
+```
+
+CPS에서 full sweep split을 GPU가 비는 즉시 시작하려면:
+
+```bash
+cd /data/adas/e2e/external/V2Xverse
+nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_cps.sh \
+  > /data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_full_cps_waiter.log 2>&1 &
+```
 
 기본 launch script는 host별 split TSV를 사용합니다. 전체 TSV를 한 머신에서 돌리고 싶으면 `JOB_FILE`을 override합니다.
 

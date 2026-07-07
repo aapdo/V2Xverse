@@ -82,6 +82,13 @@ def write(path, rows):
         writer.writerows(rows)
 
 
+def split_weighted(rows, pattern):
+    buckets = {name: [] for name in sorted(set(pattern))}
+    for idx, item in enumerate(rows):
+        buckets[pattern[idx % len(pattern)]].append(item)
+    return buckets
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", default=str(Path(__file__).resolve().parent))
@@ -109,6 +116,13 @@ def main():
         for severity in ["mild", "mid", "severe", "stress"]:
             full_rows.append(row("phase1full", "clean_all", family, severity, "all_shifted", args.seed, args.full_max_samples))
     write(out / "jobs_phase1_full.tsv", full_rows)
+
+    full_split = split_weighted(
+        full_rows,
+        ["farm9", "farm1", "farm9", "farm1", "cps", "farm9", "farm1", "farm9", "farm1", "cps", "farm9", "farm1"],
+    )
+    for host, host_rows in full_split.items():
+        write(out / f"jobs_phase1_full_{host}.tsv", host_rows)
 
 
 if __name__ == "__main__":
