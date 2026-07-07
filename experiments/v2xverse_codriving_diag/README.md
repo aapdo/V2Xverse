@@ -30,7 +30,8 @@
 - `jobs_phase1_pilot.tsv`: 대표 shift pilot sweep.
 - `jobs_phase1_pilot_farm1.tsv`, `jobs_phase1_pilot_farm9.tsv`: pilot host split.
 - `jobs_phase1_full.tsv`: full open-loop shift sweep 전체 job.
-- `jobs_phase1_full_farm_shared.tsv`, `jobs_phase1_full_cps.tsv`: full sweep 기본 split.
+- `jobs_phase1_full_farm_shared.tsv`: FARM 공유 queue용 full sweep 전체 `300`개 job.
+- `jobs_phase1_full_cps.tsv`: CPS가 실제로 비어 있을 때 offload할 수 있는 optional split.
 - `jobs_phase1_full_farm*.tsv`: static fallback split.
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
@@ -113,6 +114,8 @@ cd /data/adas/e2e/external/V2Xverse
 nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_cps.sh \
   > /data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_full_cps_waiter.log 2>&1 &
 ```
+
+주의: FARM shared queue가 이미 전체 `300`개를 소비 중이면 CPS split을 동시에 돌리지 않습니다. CPS가 비었고 FARM에서 일부 pending job을 떼어낼 때만 CPS split을 사용합니다.
 
 기본 launch script는 host별 split TSV를 사용합니다. 전체 TSV를 한 머신에서 돌리고 싶으면 `JOB_FILE`을 override합니다.
 

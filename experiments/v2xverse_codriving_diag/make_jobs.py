@@ -142,10 +142,7 @@ def main():
     for host, host_rows in full_split.items():
         write(out / f"jobs_phase1_full_{host}.tsv", host_rows)
 
-    farm_rows = []
-    for host in ["farm8", "farm6", "farm7", "farm1", "farm2", "farm9"]:
-        farm_rows.extend(full_split[host])
-    write(out / "jobs_phase1_full_farm_shared.tsv", farm_rows)
+    write(out / "jobs_phase1_full_farm_shared.tsv", full_rows)
 
 
 if __name__ == "__main__":

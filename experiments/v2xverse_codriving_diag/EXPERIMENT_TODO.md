@@ -46,14 +46,14 @@
   - `experiments/v2xverse_codriving_diag/jobs_phase1_pilot_farm9.tsv`
 - Full phase 1 sweep jobs: `experiments/v2xverse_codriving_diag/jobs_phase1_full.tsv`
 - Full phase 1 machine splits:
-  - FARM shared queue: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv` (`282` jobs)
+  - FARM shared queue: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv` (`300` jobs)
   - FARM8: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm8.tsv` (`66` jobs)
   - FARM6: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm6.tsv` (`50` jobs)
   - FARM7: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm7.tsv` (`50` jobs)
   - FARM1: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm1.tsv` (`50` jobs)
   - FARM2: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm2.tsv` (`33` jobs)
   - FARM9: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm9.tsv` (`33` jobs)
-  - CPS: `experiments/v2xverse_codriving_diag/jobs_phase1_full_cps.tsv` (`18` jobs)
+  - CPS optional offload: `experiments/v2xverse_codriving_diag/jobs_phase1_full_cps.tsv` (`18` jobs)
 - Full phase 1 launchers:
   - FARM shared immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh`
   - FARM shared wait-until-free: `experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh`
@@ -146,14 +146,14 @@ Job file:
 
 Machine split:
 
-- FARM shared queue is the default execution mode for FARM hosts. FARM2/6/7/8/9 and later FARM1 all consume the same `282` pending-job queue, so a faster or earlier-freed host automatically takes more work.
+- FARM shared queue is the default execution mode for FARM hosts. FARM2/6/7/8/9 and later FARM1 all consume the same `300` pending-job queue, so a faster or earlier-freed host automatically takes more work.
 - FARM8: `66` jobs on GPUs `0,1,2,3`.
 - FARM6: `50` jobs on GPUs `0,1,2`.
 - FARM7: `50` jobs on GPUs `0,1,2`.
 - FARM1: `50` jobs on GPUs `1,2,3` after the remaining pilot jobs finish; GPU `0` remains reserved.
 - FARM2: `33` jobs on GPUs `0,1`.
 - FARM9: `33` jobs on GPUs `1,2`; GPU `0` remains reserved.
-- CPS: `18` jobs on the first free GPU, normally GPU `0` after the duplicate pilot process is stopped.
+- CPS: optional offload only. Do not run CPS split concurrently while the FARM shared queue contains all `300` jobs, unless those jobs are explicitly removed or marked from the FARM queue first.
 
 Default result roots:
 
