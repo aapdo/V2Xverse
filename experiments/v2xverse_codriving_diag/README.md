@@ -26,6 +26,7 @@
 - `launch_shared_queue.py`: FARM 공유 스토리지에서 여러 host가 하나의 pending queue를 같이 소비하는 런처.
 - `offload_shared_jobs.py`: FARM shared queue의 pending job을 CPS 같은 별도 스토리지 host로 중복 없이 offload/merge/release하는 유틸.
 - `enrich_planning_deltas.py`: phase0 baseline을 기준으로 planning CSV에 delta/worse/coop-state columns를 후처리로 추가하는 유틸.
+- `make_best_single_source.py`: 완료된 `clean_rsu_only`/`clean_vehicle_only` 결과에서 sample별 lower-ADE source를 골라 empirical `clean_best_single_source` baseline artifact를 만드는 유틸.
 - `make_jobs.py`: baseline/pilot/full job TSV 생성기.
 - `jobs_phase0.tsv`: baseline source utility 평가.
 - `jobs_phase0_farm1.tsv`, `jobs_phase0_farm9.tsv`: 중복 실행 방지용 host split.
@@ -239,11 +240,17 @@ combined/RESULTS.md
 Baseline 대비 delta/coop-state 필드 후처리:
 
 ```bash
+python experiments/v2xverse_codriving_diag/make_best_single_source.py \
+  --rsu-planning experiments/v2xverse_codriving_diag/results/phase0_farm1_20260706_085007/phase0_clean_rsu_only_seed0/per_sample_planning.csv \
+  --cav-planning experiments/v2xverse_codriving_diag/results/phase0_farm1_20260706_085007/phase0_clean_vehicle_only_seed0/per_sample_planning.csv \
+  --out-dir experiments/v2xverse_codriving_diag/results/phase0_empirical_baselines/phase0_clean_best_single_source_empirical_seed0
+
 python experiments/v2xverse_codriving_diag/enrich_planning_deltas.py \
   --target-root experiments/v2xverse_codriving_diag/results/<run_root> \
   --baseline-root experiments/v2xverse_codriving_diag/results/phase0_farm1_20260706_085007 \
   --baseline-root experiments/v2xverse_codriving_diag/results/phase0_farm9_20260706_085007 \
+  --baseline-root experiments/v2xverse_codriving_diag/results/phase0_empirical_baselines/phase0_clean_best_single_source_empirical_seed0 \
   --combined-out experiments/v2xverse_codriving_diag/results/<run_root>/combined/planning_enriched.csv
 ```
 
-이 도구는 각 run directory에 `per_sample_planning_enriched.csv`를 만들고, `delta_ADE_vs_clean_all`, `delta_ADE_vs_ego`, `delta_ADE_vs_null_all`, `worse_than_*`, `native_coop_state`, `shift_coop_state`를 채웁니다. `clean_best_single_source` baseline이 아직 없으면 해당 column은 빈 값으로 남깁니다.
+이 도구는 각 run directory에 `per_sample_planning_enriched.csv`를 만들고, `delta_ADE_vs_clean_all`, `delta_ADE_vs_ego`, `delta_ADE_vs_null_all`, `delta_ADE_vs_clean_best_single_source`, `worse_than_*`, `native_coop_state`, `shift_coop_state`를 채웁니다. Empirical best-source baseline은 post-hoc oracle baseline이며 재추론 결과가 아닙니다.
