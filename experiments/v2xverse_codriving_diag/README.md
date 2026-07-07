@@ -27,6 +27,7 @@
 - `offload_shared_jobs.py`: FARM shared queue의 pending job을 CPS 같은 별도 스토리지 host로 중복 없이 offload/merge/release하는 유틸.
 - `enrich_planning_deltas.py`: phase0 baseline을 기준으로 planning CSV에 delta/worse/coop-state columns를 후처리로 추가하는 유틸.
 - `make_best_single_source.py`: 완료된 `clean_rsu_only`/`clean_vehicle_only` 결과에서 sample별 lower-ADE source를 골라 empirical `clean_best_single_source` baseline artifact를 만드는 유틸.
+- `postprocess_done_runs.py`: shared queue의 `done` row만 aggregate/enrichment 대상으로 삼아 partial/final combined artifacts를 갱신하는 유틸.
 - `make_jobs.py`: baseline/pilot/full job TSV 생성기.
 - `jobs_phase0.tsv`: baseline source utility 평가.
 - `jobs_phase0_farm1.tsv`, `jobs_phase0_farm9.tsv`: 중복 실행 방지용 host split.
@@ -42,6 +43,7 @@
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
 - `bin/monitor_cps_offload.sh`: SSH로 FARM shared queue와 CPS를 연결해 free CPS GPU에 job을 자동 offload하는 controller용 monitor.
 - `bin/monitor_objective_chain.sh`: 현재 FARM shared queue가 drain되면 `jobs_objective_full.tsv` objective queue를 FARM/CPS에 자동으로 이어서 띄우는 controller용 monitor.
+- `bin/monitor_done_postprocess.sh`: FARM shared queue의 completed run만 주기적으로 aggregate/enrich하는 monitor.
 - `bin/watch_cps_offload_batch.sh`: CPS offload batch가 launch된 뒤 monitor가 중단됐을 때 completion merge/release를 이어받는 recovery watcher.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
 
@@ -221,6 +223,14 @@ Current `300`-job full queue가 끝나면 objective `428`-job full queue를 자�
 CURRENT_QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
 nohup bash experiments/v2xverse_codriving_diag/bin/monitor_objective_chain.sh \
   > /tmp/v2x_objective_chain_<stamp>.log 2>&1 &
+```
+
+Completed run postprocess는 FARM shared result root에서 주기적으로 돌릴 수 있습니다. 이 monitor는 `shared_queue_status.csv`에서 `done`인 run만 읽어 `combined/summary.csv`, `combined/RESULTS.md`, `combined/planning_enriched_done.csv`, `combined/postprocess_status.json`을 갱신합니다.
+
+```bash
+QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
+nohup bash experiments/v2xverse_codriving_diag/bin/monitor_done_postprocess.sh \
+  > experiments/v2xverse_codriving_diag/results/postprocess_phase1_full_<stamp>.log 2>&1 &
 ```
 
 ## wandb

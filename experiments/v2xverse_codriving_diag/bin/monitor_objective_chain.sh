@@ -59,10 +59,20 @@ launch_farm_host() {
 }
 
 launch_farm1_waiter() {
-  local log_path="$RESULTS_ROOT/objective_full_farm1_waiter_$OBJECTIVE_STAMP.log"
-  local pid_path="$RESULTS_ROOT/objective_full_farm1_waiter_$OBJECTIVE_STAMP.pid"
-  ssh "${SSH_OPTS[@]}" FARM1 "cd '$FARM_ROOT' && JOB_FILE='$OBJECTIVE_JOB_FILE' OUT_ROOT='$OBJECTIVE_OUT_ROOT' V2X_HOST_TAG='farm1' V2X_ALLOWED_GPUS='1,2,3' V2X_MIN_GPUS='3' nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh > '$log_path' 2>&1 & echo \$! > '$pid_path'"
-  log "launched objective FARM1 waiter"
+  local gpu log_path pid_path
+  for gpu in 1 2 3; do
+    log_path="$RESULTS_ROOT/objective_full_farm1_gpu${gpu}_waiter_$OBJECTIVE_STAMP.log"
+    pid_path="$RESULTS_ROOT/objective_full_farm1_gpu${gpu}_waiter_$OBJECTIVE_STAMP.pid"
+    ssh "${SSH_OPTS[@]}" FARM1 "cd '$FARM_ROOT' && JOB_FILE='$OBJECTIVE_JOB_FILE' OUT_ROOT='$OBJECTIVE_OUT_ROOT' V2X_HOST_TAG='farm1' V2X_ALLOWED_GPUS='$gpu' V2X_MIN_GPUS='1' V2X_MAX_GPUS='1' nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh > '$log_path' 2>&1 & echo \$! > '$pid_path'"
+    log "launched objective FARM1 waiter gpu=$gpu"
+  done
+}
+
+launch_postprocess_monitor() {
+  local log_path="$RESULTS_ROOT/objective_full_postprocess_$OBJECTIVE_STAMP.log"
+  local pid_path="$RESULTS_ROOT/objective_full_postprocess_$OBJECTIVE_STAMP.pid"
+  ssh "${SSH_OPTS[@]}" "$FARM_STATUS_HOST" "if [ -f '$pid_path' ] && kill -0 \$(cat '$pid_path') 2>/dev/null; then exit 0; fi; cd '$FARM_ROOT' && QUEUE_ROOT='$OBJECTIVE_OUT_ROOT' V2X_POSTPROCESS_EXIT_ON_DRAIN='1' nohup bash experiments/v2xverse_codriving_diag/bin/monitor_done_postprocess.sh > '$log_path' 2>&1 & echo \$! > '$pid_path'"
+  log "ensured objective postprocess monitor"
 }
 
 configure_cps_monitor() {
@@ -84,6 +94,7 @@ launch_objective_queue() {
     launch_farm_host FARM9 farm9 1,2
     launch_farm1_waiter
   fi
+  launch_postprocess_monitor
   configure_cps_monitor
 }
 
