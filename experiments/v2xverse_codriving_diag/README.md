@@ -41,6 +41,7 @@
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
 - `bin/monitor_cps_offload.sh`: SSH로 FARM shared queue와 CPS를 연결해 free CPS GPU에 job을 자동 offload하는 controller용 monitor.
+- `bin/watch_cps_offload_batch.sh`: CPS offload batch가 launch된 뒤 monitor가 중단됐을 때 completion merge/release를 이어받는 recovery watcher.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
 
 ## Phase Chaining
@@ -194,6 +195,15 @@ nohup bash experiments/v2xverse_codriving_diag/bin/monitor_cps_offload.sh \
 ```bash
 launchctl print gui/$(id -u)/com.jy.v2x.cps-offload
 tail -f /tmp/v2x_cps_offload_monitor_launchd.log
+```
+
+Monitor가 claim/launch 이후 끊긴 batch는 watcher로 merge/release를 이어받습니다.
+
+```bash
+BATCH=20260707_130301 \
+QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
+nohup bash experiments/v2xverse_codriving_diag/bin/watch_cps_offload_batch.sh \
+  > /tmp/v2x_cps_offload_20260707_130301_watcher.log 2>&1 &
 ```
 
 ## wandb
