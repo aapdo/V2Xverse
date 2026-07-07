@@ -41,6 +41,7 @@
 - `aggregate_results.py`: completed run의 `summary.json`을 모아 `combined/RESULTS.md` 생성.
 - `bin/launch_*`: FARM1/FARM9용 기본 실행 스크립트.
 - `bin/monitor_cps_offload.sh`: SSH로 FARM shared queue와 CPS를 연결해 free CPS GPU에 job을 자동 offload하는 controller용 monitor.
+- `bin/monitor_objective_chain.sh`: 현재 FARM shared queue가 drain되면 `jobs_objective_full.tsv` objective queue를 FARM/CPS에 자동으로 이어서 띄우는 controller용 monitor.
 - `bin/watch_cps_offload_batch.sh`: CPS offload batch가 launch된 뒤 monitor가 중단됐을 때 completion merge/release를 이어받는 recovery watcher.
 - `EXPERIMENT_TODO.md`: machine layout, config, phase별 TODO, log/result 경로 정리.
 
@@ -197,6 +198,14 @@ launchctl print gui/$(id -u)/com.jy.v2x.cps-offload
 tail -f /tmp/v2x_cps_offload_monitor_launchd.log
 ```
 
+LaunchAgent wrapper는 아래 controller-local state files를 읽어 active FARM queue와 job file을 정합니다. Objective chain monitor가 current full queue 완료 후 이 파일들을 objective queue로 갱신합니다.
+
+```text
+/Users/jy/.codex/v2x_cps_offload_queue_root
+/Users/jy/.codex/v2x_cps_offload_jobs_file
+/Users/jy/.codex/v2x_cps_offload_prefix
+```
+
 Monitor가 claim/launch 이후 끊긴 batch는 다음 monitor loop에서 자동 recovery 대상이 됩니다. 별도로 감시해야 하면 watcher로 merge/release를 이어받을 수 있습니다.
 
 ```bash
@@ -204,6 +213,14 @@ BATCH=20260707_130301 \
 QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
 nohup bash experiments/v2xverse_codriving_diag/bin/watch_cps_offload_batch.sh \
   > /tmp/v2x_cps_offload_20260707_130301_watcher.log 2>&1 &
+```
+
+Current `300`-job full queue가 끝나면 objective `428`-job full queue를 자동으로 이어서 띄우려면 controller에서 chain monitor를 실행합니다.
+
+```bash
+CURRENT_QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
+nohup bash experiments/v2xverse_codriving_diag/bin/monitor_objective_chain.sh \
+  > /tmp/v2x_objective_chain_<stamp>.log 2>&1 &
 ```
 
 ## wandb

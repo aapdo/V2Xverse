@@ -71,6 +71,7 @@
   - FARM shared immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh`
   - FARM shared wait-until-free: `experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh`
   - CPS cross-storage offload monitor: `experiments/v2xverse_codriving_diag/bin/monitor_cps_offload.sh`
+  - Objective queue chain monitor: `experiments/v2xverse_codriving_diag/bin/monitor_objective_chain.sh`
   - CPS offload recovery watcher: `experiments/v2xverse_codriving_diag/bin/watch_cps_offload_batch.sh`
   - FARM2 immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm2.sh`
   - FARM6 immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm6.sh`
@@ -176,6 +177,7 @@ Execution policy:
 - CPS is dynamic offload only. Do not run a static CPS split concurrently while the FARM shared queue contains all `300` jobs, unless those jobs are explicitly removed or marked from the FARM queue first.
 - CPS has separate storage, so it cannot directly join the FARM lock directory. To use CPS safely, first run `offload_shared_jobs.py claim` on FARM to mark pending rows as `offloaded` and write a CPS TSV, copy that TSV to CPS, run `launch_phase1_full_cps.sh` with `JOB_FILE=<offload TSV>`, then merge CPS `launcher_status.csv` back with `offload_shared_jobs.py merge`. If CPS launch is aborted before running, use `offload_shared_jobs.py release --host-id cps`.
 - `bin/monitor_cps_offload.sh` automates the CPS procedure from a controller host that can SSH to both `FARM9` and `cps_workstation`. It excludes GPUs already running CPS offload batches, waits until remaining CPS GPUs satisfy the free-GPU threshold, claims `free_gpu_count * V2X_CPS_OFFLOAD_JOBS_PER_GPU` pending jobs from the FARM shared queue, launches CPS asynchronously, then loops. Every loop also scans already offloaded CPS batches and merges finished `launcher_status.csv` files back into the FARM shared queue. The default depth is `2` jobs per free GPU, with optional cap `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`.
+- `bin/monitor_objective_chain.sh` waits for the current `300`-job FARM shared queue to drain, launches `jobs_objective_full.tsv` (`428` jobs) as the next FARM shared queue on FARM2/6/7/8/9 plus the FARM1 waiter, updates controller-local CPS monitor state files, and restarts the CPS LaunchAgent so CPS offload claims from the objective job file.
 - If a controller is interrupted after CPS launch, run `bin/watch_cps_offload_batch.sh` with the batch stamp. It waits for the CPS launcher PID, merges `launcher_status.csv` into the FARM shared queue, or releases the claimed rows if the CPS status file is missing.
 
 Default result roots:

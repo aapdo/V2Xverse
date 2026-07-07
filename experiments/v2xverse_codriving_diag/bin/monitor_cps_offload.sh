@@ -10,6 +10,7 @@ CPS_HOST="${CPS_HOST:-cps_workstation}"
 FARM_ROOT="${FARM_ROOT:-/home/jy/adas/external/V2Xverse}"
 CPS_ROOT="${CPS_ROOT:-/data/adas/e2e/external/V2Xverse}"
 QUEUE_ROOT="${QUEUE_ROOT:?set QUEUE_ROOT to the active FARM shared queue root}"
+JOBS_FILE="${JOBS_FILE:-experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv}"
 FARM_PYTHON="${FARM_PYTHON:-python3}"
 CPS_RESULTS_ROOT="${CPS_RESULTS_ROOT:-/data/adas/e2e/experiments/v2xverse_codriving_diag/results}"
 LOCAL_TMP="${LOCAL_TMP:-/tmp/v2xverse_cps_offload}"
@@ -23,6 +24,7 @@ MAX_GPUS="${V2X_MAX_GPUS:-2}"
 BATCHES="${V2X_CPS_OFFLOAD_BATCHES:-0}"
 JOBS_PER_GPU="${V2X_CPS_OFFLOAD_JOBS_PER_GPU:-2}"
 MAX_JOBS_PER_BATCH="${V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH:-0}"
+CPS_OFFLOAD_PREFIX="${V2X_CPS_OFFLOAD_PREFIX:-phase1_full_cps_offload}"
 
 mkdir -p "$LOCAL_TMP"
 
@@ -40,7 +42,7 @@ memory_rule() {
 
 active_cps_offload_gpus() {
   ssh "${SSH_OPTS[@]}" "$CPS_HOST" \
-    "pgrep -af 'launch_local_queue.py .*phase1_full_cps_offload' | awk '{for (i=1; i<=NF; i++) { if (\$i == \"--gpus\") { n=split(\$(i+1), g, \",\"); for (j=1; j<=n; j++) print g[j]; } }}' | sort -u | paste -sd, -" \
+    "pgrep -af 'launch_local_queue.py .*$CPS_OFFLOAD_PREFIX' | awk '{for (i=1; i<=NF; i++) { if (\$i == \"--gpus\") { n=split(\$(i+1), g, \",\"); for (j=1; j<=n; j++) print g[j]; } }}' | sort -u | paste -sd, -" \
     || true
 }
 
@@ -96,7 +98,7 @@ release_batch() {
 
 cps_batch_active() {
   local batch="$1"
-  ssh "${SSH_OPTS[@]}" "$CPS_HOST" "pgrep -af 'phase1_full_cps_offload_$batch' | grep -E 'launch_phase1_full_cps.sh|launch_local_queue.py|run_planner_diag.py' >/dev/null"
+  ssh "${SSH_OPTS[@]}" "$CPS_HOST" "pgrep -af '${CPS_OFFLOAD_PREFIX}_$batch' | grep -E 'launch_phase1_full_cps.sh|launch_local_queue.py|run_planner_diag.py' >/dev/null"
 }
 
 release_cps_out() {
@@ -115,14 +117,14 @@ release_cps_out() {
 
 recover_cps_batches() {
   local batches cps_out batch local_status farm_status
-  batches="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && \$8 ~ /phase1_full_cps_offload_/ {print \$8}' '$QUEUE_ROOT/shared_queue_status.csv' | sort -u" || true)"
+  batches="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && index(\$8, \"$CPS_OFFLOAD_PREFIX\") > 0 {print \$8}' '$QUEUE_ROOT/shared_queue_status.csv' | sort -u" || true)"
   if [ -z "$batches" ]; then
     return
   fi
 
   while IFS= read -r cps_out; do
     [ -n "$cps_out" ] || continue
-    batch="$(basename "$cps_out" | sed 's/^phase1_full_cps_offload_//')"
+    batch="$(basename "$cps_out" | sed "s/^${CPS_OFFLOAD_PREFIX}_//")"
     local_status="$LOCAL_TMP/launcher_status_cps_offload_$batch.csv"
     farm_status="/tmp/launcher_status_cps_offload_$batch.csv"
 
@@ -175,16 +177,16 @@ while true; do
   CLAIM_COUNT="$(claim_count_for_gpus "$GPU_COUNT")"
 
   BATCH="$(date +%Y%m%d_%H%M%S)"
-  FARM_JOBS="$FARM_ROOT/experiments/v2xverse_codriving_diag/results/jobs_phase1_full_cps_offload_$BATCH.tsv"
-  CPS_JOBS="$CPS_ROOT/experiments/v2xverse_codriving_diag/jobs_phase1_full_cps_offload_$BATCH.tsv"
-  CPS_OUT="$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH"
-  LOCAL_JOBS="$LOCAL_TMP/jobs_phase1_full_cps_offload_$BATCH.tsv"
-  LOCAL_IDS="$LOCAL_TMP/jobs_phase1_full_cps_offload_$BATCH.ids"
-  LOCAL_STATUS="$LOCAL_TMP/launcher_status_cps_offload_$BATCH.csv"
+  FARM_JOBS="$FARM_ROOT/experiments/v2xverse_codriving_diag/results/jobs_${CPS_OFFLOAD_PREFIX}_$BATCH.tsv"
+  CPS_JOBS="$CPS_ROOT/experiments/v2xverse_codriving_diag/jobs_${CPS_OFFLOAD_PREFIX}_$BATCH.tsv"
+  CPS_OUT="$CPS_RESULTS_ROOT/${CPS_OFFLOAD_PREFIX}_$BATCH"
+  LOCAL_JOBS="$LOCAL_TMP/jobs_${CPS_OFFLOAD_PREFIX}_$BATCH.tsv"
+  LOCAL_IDS="$LOCAL_TMP/jobs_${CPS_OFFLOAD_PREFIX}_$BATCH.ids"
+  LOCAL_STATUS="$LOCAL_TMP/launcher_status_${CPS_OFFLOAD_PREFIX}_$BATCH.csv"
   FARM_STATUS="/tmp/launcher_status_cps_offload_$BATCH.csv"
 
   log "claiming CPS offload batch=$BATCH gpus=$GPUS gpu_count=$GPU_COUNT claim_count=$CLAIM_COUNT jobs_per_gpu=$JOBS_PER_GPU"
-  CLAIM_OUTPUT="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py claim --queue-root '$QUEUE_ROOT' --jobs experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv --count '$CLAIM_COUNT' --out-jobs '$FARM_JOBS' --host-id cps --remote-out-root '$CPS_OUT'")"
+  CLAIM_OUTPUT="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py claim --queue-root '$QUEUE_ROOT' --jobs '$JOBS_FILE' --count '$CLAIM_COUNT' --out-jobs '$FARM_JOBS' --host-id cps --remote-out-root '$CPS_OUT'")"
   log "$CLAIM_OUTPUT"
   CLAIMED="$(awk -F'[ =]' '/claimed=/{print $2}' <<< "$CLAIM_OUTPUT" | tail -1)"
   if [ "${CLAIMED:-0}" -eq 0 ]; then
@@ -197,7 +199,7 @@ while true; do
   scp "$LOCAL_JOBS" "$CPS_HOST:$CPS_JOBS" >/dev/null
 
   log "launching CPS offload batch=$BATCH on GPUs=$GPUS"
-  if ! ssh "${SSH_OPTS[@]}" "$CPS_HOST" "cd '$CPS_ROOT' && mkdir -p '$CPS_RESULTS_ROOT' && JOB_FILE='$CPS_JOBS' OUT_ROOT='$CPS_OUT' V2X_GPU_LIST='$GPUS' nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh > '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.log' 2>&1 & echo \$! > '$CPS_RESULTS_ROOT/phase1_full_cps_offload_$BATCH.pid'"; then
+  if ! ssh "${SSH_OPTS[@]}" "$CPS_HOST" "cd '$CPS_ROOT' && mkdir -p '$CPS_RESULTS_ROOT' && JOB_FILE='$CPS_JOBS' OUT_ROOT='$CPS_OUT' V2X_GPU_LIST='$GPUS' nohup bash experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh > '$CPS_RESULTS_ROOT/${CPS_OFFLOAD_PREFIX}_$BATCH.log' 2>&1 & echo \$! > '$CPS_RESULTS_ROOT/${CPS_OFFLOAD_PREFIX}_$BATCH.pid'"; then
     log "failed to launch CPS offload batch=$BATCH; releasing claimed rows"
     release_batch "$LOCAL_IDS"
     sleep "$POLL_SECONDS"
