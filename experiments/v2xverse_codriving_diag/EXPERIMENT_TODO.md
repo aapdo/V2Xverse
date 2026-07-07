@@ -7,6 +7,7 @@
 - wandb project: `v2xverse-codriving-zero-shot`.
 - FARM1 GPU 0 and FARM9 GPU 0 are reserved and must not be used.
 - FARM machines share `/home/jy/adas/external/V2Xverse`; CPS uses separate `/data` storage.
+- Execution must be queue-based, not a fixed static split. Any FARM host/GPU that becomes free should keep claiming the next pending row from the shared queue. CPS cannot share the lock directory directly, so it participates through monitored one-job offload leases from the same FARM queue.
 
 ## 1. Machine Layout
 
@@ -59,7 +60,7 @@
   - `experiments/v2xverse_codriving_diag/jobs_objective_stage5.tsv` (`132` jobs)
   - `experiments/v2xverse_codriving_diag/jobs_objective_stage6.tsv` (`9` jobs)
   - `experiments/v2xverse_codriving_diag/jobs_objective_full.tsv` (`428` jobs)
-- Full phase 1 queue and fallback files:
+- Full phase 1 shared queue and fallback files:
   - FARM shared queue: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv` (`300` jobs)
   - FARM8: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm8.tsv` (`66` jobs)
   - FARM6: `experiments/v2xverse_codriving_diag/jobs_phase1_full_farm6.tsv` (`50` jobs)
@@ -83,6 +84,15 @@
   - FARM1 wait-until-free: `experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm1.sh`
   - CPS immediate: `experiments/v2xverse_codriving_diag/bin/launch_phase1_full_cps.sh`
   - CPS wait-until-free: `experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_cps.sh`
+
+## 2.1 Dynamic Execution Policy
+
+- Primary FARM execution is `launch_shared_queue.py` against one `shared_queue_status.csv`, not host-local fixed slices. FARM2/6/7/8/9 and later free FARM1 GPUs all claim from the same pending list.
+- Current FARM GPU pool for the shared queue is FARM2 GPUs `0,1`, FARM6 GPUs `0,1,2`, FARM7 GPUs `0,1,2`, FARM8 GPUs `0,1,2,3`, FARM9 GPUs `1,2`, and FARM1 GPUs `1,2,3` as they become available after pilot jobs. FARM1 GPU `0` and FARM9 GPU `0` stay reserved.
+- Per-host full-sweep TSVs (`jobs_phase1_full_farm*.tsv`) are fallback/recovery artifacts only. They should not be used as the normal execution plan while the shared queue is healthy, because static slices can leave a host idle while other hosts still have work.
+- CPS participates through `bin/monitor_cps_offload.sh`: it marks FARM pending rows as `offloaded`, copies a tiny TSV to `/data`, runs the job on a free CPS GPU, copies completed result directories back to the FARM result root, and merges `launcher_status.csv` into the shared queue.
+- CPS batch depth should stay at the default `V2X_CPS_OFFLOAD_JOBS_PER_GPU=1` for this sweep. That makes each CPS GPU lease one job at a time, so if one CPS GPU finishes first it immediately claims another FARM pending job without waiting for the other CPS GPU.
+- The objective chain uses the same policy: after the current `300`-job queue drains, `bin/monitor_objective_chain.sh` launches `jobs_objective_full.tsv` (`428` jobs) as a new shared FARM queue and rewires the CPS offload monitor to claim from that objective queue.
 
 ## 3. Phase 0 Baselines
 
@@ -349,3 +359,5 @@ Last checked: 2026-07-07 15:10 KST. Current shared queue remains `done=14,runnin
 Last checked: 2026-07-07 15:12 KST. CPS offload monitor was patched to skip copying finished CPS result directories that already exist on the FARM result root. This avoids repeatedly tar/scp-ing the same completed CPS run while another job from the same CPS batch is still running. Current shared queue remains `done=14,running=17,pending=269`; CPS second jobs continue on GPUs `0` and `1`.
 
 Last checked: 2026-07-07 15:14 KST. FARM shared queue advanced to `done=16,running=17,pending=267` with no failed rows and no fatal FARM log patterns. Completed-run postprocess was refreshed to `done_result_dirs=16`, `summary_rows=16`, `enriched_rows=56960`, `missing_baseline_rows=0`, and no missing completed result directories. The duplicate root-level copies of `monitor_cps_offload.sh` created during a previous manual sync were removed from FARM/CPS, and the real `bin/monitor_cps_offload.sh` on both storage systems now contains the `copy skipped` / `missing_ids_file` duplicate-copy guard. CPS second jobs continue running after the initial CPS completions were merged.
+
+Last checked: 2026-07-07 15:18 KST. Execution policy was restated at the top of this TODO to avoid treating the old per-host TSVs as the actual plan: FARM uses one shared pending queue, and CPS uses monitored one-job offload leases from that queue. Live queue status remains `done=16,running=17,pending=267` with `failed=0`; active workers are `farm1=1`, `farm2=2`, `farm6=3`, `farm7=3`, `farm8=4`, `farm9=2`, and `cps=2`. Completed-run postprocess is current at `done_rows=16`, `summary_rows=16`, `enriched_rows=56960`, `missing_baseline_rows=0`. CPS has no fatal log patterns; current CPS jobs are `phase1full_clean_all_latency_jitter_s2_all_shifted_seed0` on GPU `0` past `progress 350/3560` and `phase1full_clean_all_latency_jitter_s2_vehicle_shifted_only_seed0` on GPU `1` past `progress 275/3560`. The CPS offload LaunchAgent and objective-chain LaunchAgent are both running; the objective chain is still waiting for this current `300`-job queue to drain before launching the `428`-job objective queue.
