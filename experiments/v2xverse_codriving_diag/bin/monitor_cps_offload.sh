@@ -23,7 +23,7 @@ UTIL_LIMIT_PCT="${V2X_FREE_UTIL_LIMIT_PCT:-20}"
 POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-300}"
 MAX_GPUS="${V2X_MAX_GPUS:-2}"
 BATCHES="${V2X_CPS_OFFLOAD_BATCHES:-0}"
-JOBS_PER_GPU="${V2X_CPS_OFFLOAD_JOBS_PER_GPU:-2}"
+JOBS_PER_GPU="${V2X_CPS_OFFLOAD_JOBS_PER_GPU:-1}"
 MAX_JOBS_PER_BATCH="${V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH:-0}"
 CPS_OFFLOAD_PREFIX="${V2X_CPS_OFFLOAD_PREFIX:-phase1_full_cps_offload}"
 ONE_BATCH_PER_GPU="${V2X_CPS_OFFLOAD_ONE_BATCH_PER_GPU:-1}"
@@ -175,7 +175,7 @@ copy_cps_results_to_farm() {
 }
 
 recover_cps_batches() {
-  local batches cps_out batch local_status farm_status
+  local batches cps_out batch local_status farm_status has_running has_finished
   batches="$(ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && index(\$8, \"$CPS_OFFLOAD_PREFIX\") > 0 {print \$8}' '$QUEUE_ROOT/shared_queue_status.csv' | sort -u" || true)"
   if [ -z "$batches" ]; then
     return
@@ -196,11 +196,21 @@ recover_cps_batches() {
       fi
       continue
     fi
-    if ssh "${SSH_OPTS[@]}" "$CPS_HOST" "grep -q ',running,' '$cps_out/launcher_status.csv'"; then
-      log "CPS recovery batch=$batch status=running"
+    if ! scp "$CPS_HOST:$cps_out/launcher_status.csv" "$local_status" >/dev/null; then
+      log "CPS recovery batch=$batch status=copy_failed"
       continue
     fi
-    if ! ssh "${SSH_OPTS[@]}" "$CPS_HOST" "grep -Eq ',(done|failed),' '$cps_out/launcher_status.csv'"; then
+
+    has_running=0
+    has_finished=0
+    if grep -q ',running,' "$local_status"; then
+      has_running=1
+    fi
+    if grep -Eq ',(done|failed),' "$local_status"; then
+      has_finished=1
+    fi
+
+    if [ "$has_running" -eq 0 ] && [ "$has_finished" -eq 0 ]; then
       if cps_batch_active "$batch"; then
         log "CPS recovery batch=$batch status=empty active=1"
       else
@@ -210,12 +220,17 @@ recover_cps_batches() {
       continue
     fi
 
-    scp "$CPS_HOST:$cps_out/launcher_status.csv" "$local_status" >/dev/null
-    copy_cps_results_to_farm "$batch" "$cps_out" "$local_status"
+    if [ "$has_finished" -eq 1 ]; then
+      copy_cps_results_to_farm "$batch" "$cps_out" "$local_status"
+    fi
     scp "$local_status" "$FARM_HOST:$farm_status" >/dev/null
     ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py merge --queue-root '$QUEUE_ROOT' --launcher-status '$farm_status' --host-id cps"
     release_missing_cps_status_rows "$batch" "$cps_out" "$local_status"
-    log "CPS recovery batch=$batch merged"
+    if [ "$has_running" -eq 1 ]; then
+      log "CPS recovery batch=$batch merged_partial status=running"
+    else
+      log "CPS recovery batch=$batch merged"
+    fi
   done <<< "$batches"
 }
 
