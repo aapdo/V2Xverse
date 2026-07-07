@@ -182,7 +182,7 @@ python experiments/v2xverse_codriving_diag/offload_shared_jobs.py release \
   --host-id cps
 ```
 
-Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 기본적으로 free GPU마다 `2`개 job을 claim하므로 CPS 안에서도 먼저 끝난 GPU가 같은 CPS batch의 다음 job을 계속 가져갑니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`와 `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`로 batch depth를 조정합니다.
+Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 기본적으로 free GPU마다 `2`개 job을 claim하므로 CPS 안에서도 먼저 끝난 GPU가 같은 CPS batch의 다음 job을 계속 가져갑니다. 매 loop에서 이미 offload된 CPS batch의 `launcher_status.csv`도 확인해 완료된 batch를 FARM shared queue로 merge합니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`와 `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`로 batch depth를 조정합니다.
 
 ```bash
 QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
@@ -197,7 +197,7 @@ launchctl print gui/$(id -u)/com.jy.v2x.cps-offload
 tail -f /tmp/v2x_cps_offload_monitor_launchd.log
 ```
 
-Monitor가 claim/launch 이후 끊긴 batch는 watcher로 merge/release를 이어받습니다.
+Monitor가 claim/launch 이후 끊긴 batch는 다음 monitor loop에서 자동 recovery 대상이 됩니다. 별도로 감시해야 하면 watcher로 merge/release를 이어받을 수 있습니다.
 
 ```bash
 BATCH=20260707_130301 \

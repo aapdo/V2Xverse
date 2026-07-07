@@ -84,12 +84,47 @@ release_batch() {
   ssh "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py release --queue-root '$QUEUE_ROOT' --host-id cps --run-id-file '$remote_ids'"
 }
 
+recover_cps_batches() {
+  local batches cps_out batch local_status farm_status
+  batches="$(ssh "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && \$8 ~ /phase1_full_cps_offload_/ {print \$8}' '$QUEUE_ROOT/shared_queue_status.csv' | sort -u" || true)"
+  if [ -z "$batches" ]; then
+    return
+  fi
+
+  while IFS= read -r cps_out; do
+    [ -n "$cps_out" ] || continue
+    batch="$(basename "$cps_out" | sed 's/^phase1_full_cps_offload_//')"
+    local_status="$LOCAL_TMP/launcher_status_cps_offload_$batch.csv"
+    farm_status="/tmp/launcher_status_cps_offload_$batch.csv"
+
+    if ! ssh "$CPS_HOST" "[ -f '$cps_out/launcher_status.csv' ]"; then
+      log "CPS recovery batch=$batch status=missing_status"
+      continue
+    fi
+    if ssh "$CPS_HOST" "grep -q ',running,' '$cps_out/launcher_status.csv'"; then
+      log "CPS recovery batch=$batch status=running"
+      continue
+    fi
+    if ! ssh "$CPS_HOST" "grep -Eq ',(done|failed),' '$cps_out/launcher_status.csv'"; then
+      log "CPS recovery batch=$batch status=empty"
+      continue
+    fi
+
+    scp "$CPS_HOST:$cps_out/launcher_status.csv" "$local_status" >/dev/null
+    scp "$local_status" "$FARM_HOST:$farm_status" >/dev/null
+    ssh "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py merge --queue-root '$QUEUE_ROOT' --launcher-status '$farm_status' --host-id cps"
+    log "CPS recovery batch=$batch merged"
+  done <<< "$batches"
+}
+
 completed_batches=0
 while true; do
   if [ "$BATCHES" != "0" ] && [ "$completed_batches" -ge "$BATCHES" ]; then
     log "completed requested CPS offload batches=$completed_batches"
     exit 0
   fi
+
+  recover_cps_batches
 
   GPUS="$(select_free_gpus || true)"
   GPU_COUNT="$(count_gpus "$GPUS")"
