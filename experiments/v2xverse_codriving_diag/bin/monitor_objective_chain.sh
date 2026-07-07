@@ -10,6 +10,8 @@ set -euo pipefail
 FARM_ROOT="${FARM_ROOT:-/home/jy/adas/external/V2Xverse}"
 FARM_STATUS_HOST="${FARM_STATUS_HOST:-FARM9}"
 CURRENT_QUEUE_ROOT="${CURRENT_QUEUE_ROOT:?set CURRENT_QUEUE_ROOT to the active shared queue root}"
+CURRENT_JOB_FILE="${CURRENT_JOB_FILE:-experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv}"
+CURRENT_CPS_PREFIX="${CURRENT_CPS_PREFIX:-phase1_full_cps_offload}"
 OBJECTIVE_JOB_FILE="${OBJECTIVE_JOB_FILE:-experiments/v2xverse_codriving_diag/jobs_objective_full.tsv}"
 OBJECTIVE_STAMP="${OBJECTIVE_STAMP:-$(date +%Y%m%d_%H%M%S)}"
 OBJECTIVE_OUT_ROOT="${OBJECTIVE_OUT_ROOT:-$FARM_ROOT/experiments/v2xverse_codriving_diag/results/objective_full_farm_shared_$OBJECTIVE_STAMP}"
@@ -22,6 +24,8 @@ CPS_QUEUE_ROOT_FILE="${CPS_QUEUE_ROOT_FILE:-/Users/jy/.codex/v2x_cps_offload_que
 CPS_JOBS_FILE_FILE="${CPS_JOBS_FILE_FILE:-/Users/jy/.codex/v2x_cps_offload_jobs_file}"
 CPS_PREFIX_FILE="${CPS_PREFIX_FILE:-/Users/jy/.codex/v2x_cps_offload_prefix}"
 CPS_LAUNCH_AGENT="${CPS_LAUNCH_AGENT:-com.jy.v2x.cps-offload}"
+CPS_RECOVERY_LOG="${CPS_RECOVERY_LOG:-/tmp/v2x_cps_current_recovery_$OBJECTIVE_STAMP.log}"
+CPS_RECOVERY_PID="${CPS_RECOVERY_PID:-/tmp/v2x_cps_current_recovery_$OBJECTIVE_STAMP.pid}"
 
 log() {
   printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
@@ -62,6 +66,11 @@ queue_ready_for_next() {
   return 1
 }
 
+current_queue_has_cps_running() {
+  ssh "${SSH_OPTS[@]}" "$FARM_STATUS_HOST" "awk -F, 'NR > 1 && \$2 == \"running\" && \$3 == \"cps\" {found=1} END {exit found ? 0 : 1}' '$CURRENT_QUEUE_ROOT/shared_queue_status.csv'" \
+    >/dev/null 2>&1
+}
+
 launch_farm_waiter() {
   local ssh_host="$1"
   local host_tag="$2"
@@ -100,11 +109,38 @@ launch_postprocess_monitor() {
 }
 
 configure_cps_monitor() {
+  if current_queue_has_cps_running; then
+    launch_current_cps_recovery_monitor
+  fi
   printf '%s\n' "$OBJECTIVE_OUT_ROOT" > "$CPS_QUEUE_ROOT_FILE"
   printf '%s\n' "$OBJECTIVE_JOB_FILE" > "$CPS_JOBS_FILE_FILE"
   printf '%s\n' "objective_full_cps_offload" > "$CPS_PREFIX_FILE"
   launchctl kickstart -k "gui/$(id -u)/$CPS_LAUNCH_AGENT" || true
   log "pointed CPS offload monitor at $OBJECTIVE_OUT_ROOT"
+}
+
+launch_current_cps_recovery_monitor() {
+  if [ -f "$CPS_RECOVERY_PID" ] && kill -0 "$(cat "$CPS_RECOVERY_PID")" 2>/dev/null; then
+    log "current CPS recovery monitor already running pid=$(cat "$CPS_RECOVERY_PID")"
+    return
+  fi
+
+  log "starting current CPS recovery monitor for tail queue"
+  (
+    export QUEUE_ROOT="$CURRENT_QUEUE_ROOT"
+    export JOBS_FILE="$CURRENT_JOB_FILE"
+    export V2X_CPS_OFFLOAD_PREFIX="$CURRENT_CPS_PREFIX"
+    export FARM_HOST="${FARM_STATUS_HOST}"
+    export CPS_HOST="${CPS_HOST:-cps_workstation}"
+    export V2X_GPU_POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-300}"
+    export V2X_MAX_GPUS="${V2X_MAX_GPUS:-2}"
+    export V2X_MIN_FREE_MEM_MIB="${V2X_MIN_FREE_MEM_MIB:-20000}"
+    export V2X_CPS_OFFLOAD_JOBS_PER_GPU="${V2X_CPS_OFFLOAD_JOBS_PER_GPU:-1}"
+    export V2X_CPS_OFFLOAD_ONE_BATCH_PER_GPU="${V2X_CPS_OFFLOAD_ONE_BATCH_PER_GPU:-1}"
+    nohup bash experiments/v2xverse_codriving_diag/bin/monitor_cps_offload.sh > "$CPS_RECOVERY_LOG" 2>&1 < /dev/null &
+    echo $! > "$CPS_RECOVERY_PID"
+  )
+  log "started current CPS recovery monitor pid=$(cat "$CPS_RECOVERY_PID") log=$CPS_RECOVERY_LOG"
 }
 
 launch_objective_queue() {
