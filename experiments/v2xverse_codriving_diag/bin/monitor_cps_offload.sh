@@ -91,7 +91,26 @@ release_batch() {
   local ids_file="$1"
   local remote_ids="/tmp/$(basename "$ids_file")"
   scp "$ids_file" "$FARM_HOST:$remote_ids" >/dev/null
-  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py release --queue-root '$QUEUE_ROOT' --host-id cps --run-id-file '$remote_ids'"
+  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py release --queue-root '$QUEUE_ROOT' --host-id cps --status offloaded --status running --run-id-file '$remote_ids'"
+}
+
+cps_batch_active() {
+  local batch="$1"
+  ssh "${SSH_OPTS[@]}" "$CPS_HOST" "pgrep -af 'phase1_full_cps_offload_$batch' | grep -E 'launch_phase1_full_cps.sh|launch_local_queue.py|run_planner_diag.py' >/dev/null"
+}
+
+release_cps_out() {
+  local batch="$1"
+  local cps_out="$2"
+  local ids_file="$LOCAL_TMP/release_cps_offload_$batch.ids"
+
+  ssh "${SSH_OPTS[@]}" "$FARM_HOST" "awk -F, 'NR > 1 && \$3 == \"cps\" && (\$2 == \"offloaded\" || \$2 == \"running\") && \$8 == \"$cps_out\" {print \$1}' '$QUEUE_ROOT/shared_queue_status.csv'" > "$ids_file"
+  if [ ! -s "$ids_file" ]; then
+    log "CPS recovery batch=$batch release skipped: no matching FARM rows"
+    return
+  fi
+  log "CPS recovery batch=$batch releasing claimed rows"
+  release_batch "$ids_file"
 }
 
 recover_cps_batches() {
@@ -108,7 +127,12 @@ recover_cps_batches() {
     farm_status="/tmp/launcher_status_cps_offload_$batch.csv"
 
     if ! ssh "${SSH_OPTS[@]}" "$CPS_HOST" "[ -f '$cps_out/launcher_status.csv' ]"; then
-      log "CPS recovery batch=$batch status=missing_status"
+      if cps_batch_active "$batch"; then
+        log "CPS recovery batch=$batch status=missing_status active=1"
+      else
+        log "CPS recovery batch=$batch status=missing_status active=0"
+        release_cps_out "$batch" "$cps_out"
+      fi
       continue
     fi
     if ssh "${SSH_OPTS[@]}" "$CPS_HOST" "grep -q ',running,' '$cps_out/launcher_status.csv'"; then
@@ -116,7 +140,12 @@ recover_cps_batches() {
       continue
     fi
     if ! ssh "${SSH_OPTS[@]}" "$CPS_HOST" "grep -Eq ',(done|failed),' '$cps_out/launcher_status.csv'"; then
-      log "CPS recovery batch=$batch status=empty"
+      if cps_batch_active "$batch"; then
+        log "CPS recovery batch=$batch status=empty active=1"
+      else
+        log "CPS recovery batch=$batch status=empty active=0"
+        release_cps_out "$batch" "$cps_out"
+      fi
       continue
     fi
 
