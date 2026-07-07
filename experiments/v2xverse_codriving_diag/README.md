@@ -16,7 +16,7 @@
   - perception: `checkpoints/codriving/perception`
   - planner: `checkpoints/codriving/planner/codriving_planner.ckpt`
 - FARM1 GPU 0과 FARM9 GPU 0은 사용하지 않는다.
-- CPS는 dataset mirror가 준비되어 있지만, 현재 GPU가 다른 작업으로 점유되어 있으면 launcher 대상에서 제외한다.
+- CPS는 dataset mirror가 준비되어 있지만, 현재 GPU free memory/utilization 기준을 만족할 때만 FARM shared queue에서 job을 offload한다.
 - `launch_phase0_farm*.sh`는 phase 0가 모두 성공하면 자동으로 phase 1 pilot을 이어서 실행한다. 실패가 있으면 `set -e`로 중단되어 phase 1은 시작하지 않는다.
 
 ## 파일
@@ -92,7 +92,7 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_pilot_cps.
   > /data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_pilot_cps_waiter.log 2>&1 &
 ```
 
-기본 free GPU 기준은 memory used `<=2048MiB`, utilization `<=20%`입니다. 필요하면 `V2X_FREE_MEM_LIMIT_MIB`, `V2X_FREE_UTIL_LIMIT_PCT`, `V2X_MAX_GPUS`로 조정합니다.
+기본 free GPU 기준은 memory free `>=20000MiB`, utilization `<=20%`입니다. 필요하면 `V2X_MIN_FREE_MEM_MIB`, `V2X_MAX_USED_MEM_MIB`, `V2X_FREE_UTIL_LIMIT_PCT`, `V2X_MAX_GPUS`로 조정합니다.
 
 Full sweep을 돌릴 때 기본 방식은 FARM shared queue입니다. 정적으로 host별 job 수를 고정하지 않고, FARM2/6/7/8/9와 나중에 비는 FARM1이 같은 `300`개 pending queue를 소비합니다.
 
@@ -181,7 +181,7 @@ python experiments/v2xverse_codriving_diag/offload_shared_jobs.py release \
   --host-id cps
 ```
 
-Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다.
+Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 기본적으로 free GPU마다 `2`개 job을 claim하므로 CPS 안에서도 먼저 끝난 GPU가 같은 CPS batch의 다음 job을 계속 가져갑니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`와 `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`로 batch depth를 조정합니다.
 
 ```bash
 QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \

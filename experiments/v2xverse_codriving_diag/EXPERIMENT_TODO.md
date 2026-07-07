@@ -26,7 +26,7 @@
 - CPS watcher:
   - pid file: `/data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_pilot_cps_waiter.pid`
   - log file: `/data/adas/e2e/experiments/v2xverse_codriving_diag/results/phase1_pilot_cps_waiter.log`
-  - default free-GPU threshold: memory used `<=2048MiB`, utilization `<=20%`
+  - default free-GPU threshold for offload monitor: memory free `>=20000MiB`, utilization `<=20%`
 
 ## 2. Config Files
 
@@ -172,9 +172,9 @@ Execution policy:
 - Active FARM GPU plan: FARM8 GPUs `0,1,2,3`; FARM6 GPUs `0,1,2`; FARM7 GPUs `0,1,2`; FARM2 GPUs `0,1`; FARM9 GPUs `1,2`; FARM1 GPUs `1,2,3` only after the remaining pilot jobs finish.
 - FARM1 GPU `0` and FARM9 GPU `0` remain reserved.
 - Static per-host TSVs are fallback/recovery files only. They are not the preferred execution plan because they can leave a server idle after its assigned slice finishes.
-- CPS is optional offload only. Do not run CPS split concurrently while the FARM shared queue contains all `300` jobs, unless those jobs are explicitly removed or marked from the FARM queue first.
+- CPS is dynamic offload only. Do not run a static CPS split concurrently while the FARM shared queue contains all `300` jobs, unless those jobs are explicitly removed or marked from the FARM queue first.
 - CPS has separate storage, so it cannot directly join the FARM lock directory. To use CPS safely, first run `offload_shared_jobs.py claim` on FARM to mark pending rows as `offloaded` and write a CPS TSV, copy that TSV to CPS, run `launch_phase1_full_cps.sh` with `JOB_FILE=<offload TSV>`, then merge CPS `launcher_status.csv` back with `offload_shared_jobs.py merge`. If CPS launch is aborted before running, use `offload_shared_jobs.py release --host-id cps`.
-- `bin/monitor_cps_offload.sh` automates the CPS procedure from a controller host that can SSH to both `FARM9` and `cps_workstation`. It waits until CPS GPUs satisfy the free-GPU threshold, claims only that number of pending jobs from the FARM shared queue, launches CPS, merges completion status, then loops.
+- `bin/monitor_cps_offload.sh` automates the CPS procedure from a controller host that can SSH to both `FARM9` and `cps_workstation`. It waits until CPS GPUs satisfy the free-GPU threshold, claims `free_gpu_count * V2X_CPS_OFFLOAD_JOBS_PER_GPU` pending jobs from the FARM shared queue, launches CPS, merges completion status, then loops. The default depth is `2` jobs per free GPU, with optional cap `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`.
 
 Default result roots:
 

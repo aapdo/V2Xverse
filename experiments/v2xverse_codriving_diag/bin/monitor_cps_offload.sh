@@ -14,11 +14,14 @@ FARM_PYTHON="${FARM_PYTHON:-python3}"
 CPS_RESULTS_ROOT="${CPS_RESULTS_ROOT:-/data/adas/e2e/experiments/v2xverse_codriving_diag/results}"
 LOCAL_TMP="${LOCAL_TMP:-/tmp/v2xverse_cps_offload}"
 
-MEM_LIMIT_MIB="${V2X_FREE_MEM_LIMIT_MIB:-2048}"
+MIN_FREE_MIB="${V2X_MIN_FREE_MEM_MIB:-20000}"
+MAX_USED_MIB="${V2X_MAX_USED_MEM_MIB:-${V2X_FREE_MEM_LIMIT_MIB:-0}}"
 UTIL_LIMIT_PCT="${V2X_FREE_UTIL_LIMIT_PCT:-20}"
 POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-300}"
 MAX_GPUS="${V2X_MAX_GPUS:-2}"
 BATCHES="${V2X_CPS_OFFLOAD_BATCHES:-0}"
+JOBS_PER_GPU="${V2X_CPS_OFFLOAD_JOBS_PER_GPU:-2}"
+MAX_JOBS_PER_BATCH="${V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH:-0}"
 
 mkdir -p "$LOCAL_TMP"
 
@@ -26,13 +29,21 @@ log() {
   printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
 }
 
+memory_rule() {
+  if [ "${MAX_USED_MIB:-0}" != "0" ]; then
+    printf 'free>=%sMiB used<=%sMiB' "$MIN_FREE_MIB" "$MAX_USED_MIB"
+  else
+    printf 'free>=%sMiB' "$MIN_FREE_MIB"
+  fi
+}
+
 select_free_gpus() {
   ssh -o ConnectTimeout=10 "$CPS_HOST" \
-    "nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader,nounits" \
-    | awk -F, -v mem="$MEM_LIMIT_MIB" -v util="$UTIL_LIMIT_PCT" -v max="$MAX_GPUS" '
+    "nvidia-smi --query-gpu=index,memory.used,memory.free,utilization.gpu --format=csv,noheader,nounits" \
+    | awk -F, -v min_free="$MIN_FREE_MIB" -v max_used="$MAX_USED_MIB" -v util="$UTIL_LIMIT_PCT" -v max="$MAX_GPUS" '
       {
-        gsub(/ /, "", $1); gsub(/ /, "", $2); gsub(/ /, "", $3);
-        if ($2 <= mem && $3 <= util) {
+        gsub(/ /, "", $1); gsub(/ /, "", $2); gsub(/ /, "", $3); gsub(/ /, "", $4);
+        if ($3 >= min_free && (max_used <= 0 || $2 <= max_used) && $4 <= util) {
           if (count > 0) {
             printf(",");
           }
@@ -54,6 +65,18 @@ count_gpus() {
   fi
 }
 
+claim_count_for_gpus() {
+  local gpu_count="$1"
+  local count=$((gpu_count * JOBS_PER_GPU))
+  if [ "$count" -lt "$gpu_count" ]; then
+    count="$gpu_count"
+  fi
+  if [ "$MAX_JOBS_PER_BATCH" != "0" ] && [ "$count" -gt "$MAX_JOBS_PER_BATCH" ]; then
+    count="$MAX_JOBS_PER_BATCH"
+  fi
+  echo "$count"
+}
+
 release_batch() {
   local ids_file="$1"
   local remote_ids="/tmp/$(basename "$ids_file")"
@@ -71,10 +94,11 @@ while true; do
   GPUS="$(select_free_gpus || true)"
   GPU_COUNT="$(count_gpus "$GPUS")"
   if [ "$GPU_COUNT" -eq 0 ]; then
-    log "CPS offload waiting: free_gpus=none mem<=${MEM_LIMIT_MIB}MiB util<=${UTIL_LIMIT_PCT}%"
+    log "CPS offload waiting: free_gpus=none $(memory_rule) util<=${UTIL_LIMIT_PCT}%"
     sleep "$POLL_SECONDS"
     continue
   fi
+  CLAIM_COUNT="$(claim_count_for_gpus "$GPU_COUNT")"
 
   BATCH="$(date +%Y%m%d_%H%M%S)"
   FARM_JOBS="$FARM_ROOT/experiments/v2xverse_codriving_diag/results/jobs_phase1_full_cps_offload_$BATCH.tsv"
@@ -85,8 +109,8 @@ while true; do
   LOCAL_STATUS="$LOCAL_TMP/launcher_status_cps_offload_$BATCH.csv"
   FARM_STATUS="/tmp/launcher_status_cps_offload_$BATCH.csv"
 
-  log "claiming CPS offload batch=$BATCH gpus=$GPUS count=$GPU_COUNT"
-  CLAIM_OUTPUT="$(ssh "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py claim --queue-root '$QUEUE_ROOT' --jobs experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv --count '$GPU_COUNT' --out-jobs '$FARM_JOBS' --host-id cps --remote-out-root '$CPS_OUT'")"
+  log "claiming CPS offload batch=$BATCH gpus=$GPUS gpu_count=$GPU_COUNT claim_count=$CLAIM_COUNT jobs_per_gpu=$JOBS_PER_GPU"
+  CLAIM_OUTPUT="$(ssh "$FARM_HOST" "cd '$FARM_ROOT' && $FARM_PYTHON experiments/v2xverse_codriving_diag/offload_shared_jobs.py claim --queue-root '$QUEUE_ROOT' --jobs experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv --count '$CLAIM_COUNT' --out-jobs '$FARM_JOBS' --host-id cps --remote-out-root '$CPS_OUT'")"
   log "$CLAIM_OUTPUT"
   CLAIMED="$(awk -F'[ =]' '/claimed=/{print $2}' <<< "$CLAIM_OUTPUT" | tail -1)"
   if [ "${CLAIMED:-0}" -eq 0 ]; then
