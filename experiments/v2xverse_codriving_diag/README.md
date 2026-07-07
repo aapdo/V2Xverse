@@ -96,7 +96,7 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_pilot_cps.
 
 기본 free GPU 기준은 memory free `>=20000MiB`, utilization `<=20%`입니다. 필요하면 `V2X_MIN_FREE_MEM_MIB`, `V2X_MAX_USED_MEM_MIB`, `V2X_FREE_UTIL_LIMIT_PCT`, `V2X_MAX_GPUS`로 조정합니다.
 
-Full sweep을 돌릴 때 기본 방식은 FARM shared queue입니다. 정적으로 host별 job 수를 고정하지 않고, FARM2/6/7/8/9와 나중에 비는 FARM1이 같은 `300`개 pending queue를 소비합니다.
+Full sweep을 돌릴 때 기본 방식은 FARM shared queue입니다. 정적으로 host별 job 수를 고정하지 않고, FARM2/6/7/8/9와 나중에 비는 FARM1이 같은 pending queue를 소비합니다. 먼저 끝난 host/GPU worker가 다음 pending row를 계속 claim하므로, 특정 서버에 미리 배정된 몫이 끝났다고 놀지 않습니다.
 
 ```bash
 cd /home/jy/adas/external/V2Xverse
@@ -134,7 +134,7 @@ nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_cps.s
 
 주의: FARM shared queue가 이미 전체 `300`개를 소비 중이면 CPS split을 동시에 돌리지 않습니다. CPS가 비었고 FARM에서 일부 pending job을 떼어낼 때만 CPS split을 사용합니다.
 
-기본 full sweep 운영은 shared queue launcher를 사용합니다. Host별 split TSV launch script는 shared queue가 깨졌을 때의 recovery/offload용입니다.
+기본 full sweep 운영은 shared queue launcher를 사용합니다. Host별 split TSV launch script는 shared queue가 깨졌을 때의 recovery/offload용입니다. 운영 중에는 split 결과를 그대로 믿지 않고, idle GPU가 생기면 같은 shared queue에서 남은 pending job을 다시 가져가는 work-stealing 방식으로 돌립니다.
 
 FARM shared queue에서 CPS로 job을 옮길 때는 먼저 FARM 큐에서 pending row를 `offloaded`로 잠급니다. 예시는 `8`개 job을 CPS로 넘기는 경우입니다.
 
@@ -183,7 +183,7 @@ python experiments/v2xverse_codriving_diag/offload_shared_jobs.py release \
   --host-id cps
 ```
 
-Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 이미 실행 중인 CPS offload GPU를 제외하고 새 free GPU만 고른 뒤, free GPU마다 기본 `2`개 job을 claim합니다. Launch 후 batch 종료를 blocking wait하지 않고 다음 loop로 돌아가므로, CPS 한쪽 GPU가 먼저 끝나면 다른 batch가 아직 running이어도 새 job을 다시 claim할 수 있습니다. 매 loop에서 이미 offload된 CPS batch의 `launcher_status.csv`도 확인해 완료된 batch를 FARM shared queue로 merge합니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`와 `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`로 batch depth를 조정합니다.
+Controller host에서 백그라운드 monitor를 걸면 CPS GPU가 비는 순간 위 절차를 자동으로 수행합니다. Monitor는 이미 실행 중인 CPS offload GPU를 제외하고 새 free GPU만 고른 뒤, 기본값으로 GPU마다 독립 batch를 만들어 각 GPU당 `2`개 job을 claim합니다. Launch 후 batch 종료를 blocking wait하지 않고 다음 loop로 돌아가므로, CPS 한쪽 GPU가 먼저 끝나면 다른 GPU의 batch가 아직 running이어도 해당 GPU만 새 job을 다시 claim할 수 있습니다. 매 loop에서 이미 offload된 CPS batch의 `launcher_status.csv`도 확인해 완료된 batch를 FARM shared queue로 merge합니다. `V2X_CPS_OFFLOAD_JOBS_PER_GPU`, `V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH`, `V2X_CPS_OFFLOAD_ONE_BATCH_PER_GPU`로 batch depth와 GPU별 batch 분리를 조정합니다.
 
 ```bash
 QUEUE_ROOT=/home/jy/adas/external/V2Xverse/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_<stamp> \
