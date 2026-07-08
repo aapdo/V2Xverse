@@ -693,11 +693,13 @@ def transform_image(img, family, severity, rng, params):
 
     if family == "motion_blur":
         k = severity_value(severity, {"s1": 5, "s2": 9, "s3": 15, "stress": 21})
-        kernel = [0.0] * (k * k)
-        for i in range(k):
-            kernel[(k // 2) * k + i] = 1.0 / k
         params["blur_kernel"] = k
-        return img.filter(ImageFilter.Kernel((k, k), kernel))
+        pad = int(k) // 2
+        padded = np.pad(arr.astype(np.float32), ((0, 0), (pad, pad), (0, 0)), mode="edge")
+        cumsum = np.cumsum(padded, axis=1, dtype=np.float32)
+        cumsum = np.concatenate([np.zeros((h, 1, arr.shape[2]), dtype=np.float32), cumsum], axis=1)
+        blurred = (cumsum[:, int(k):, :] - cumsum[:, :-int(k), :]) / float(k)
+        return Image.fromarray(np.clip(np.rint(blurred), 0, 255).astype(np.uint8))
 
     if family == "defocus_blur":
         radius = severity_value(severity, {"s1": 1, "s2": 2, "s3": 3, "stress": 5})
