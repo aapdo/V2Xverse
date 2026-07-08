@@ -35,6 +35,15 @@ active_rows() {
 cd "$ROOT"
 
 while true; do
+  if [ ! -f "$QUEUE_ROOT/shared_queue_status.csv" ]; then
+    log "queue status missing; waiting queue_root=$QUEUE_ROOT"
+    if [ "$ONCE" = "1" ]; then
+      exit 1
+    fi
+    sleep "$POLL_SECONDS"
+    continue
+  fi
+
   mapfile -t BASE_ARGS < <(baseline_args)
   log "postprocess start queue_root=$QUEUE_ROOT"
   python3 experiments/v2xverse_codriving_diag/postprocess_done_runs.py \
