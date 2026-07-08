@@ -19,6 +19,8 @@ RESULTS_ROOT="${FARM_ROOT}/experiments/v2xverse_codriving_diag/results"
 POLL_SECONDS="${V2X_CHAIN_POLL_SECONDS:-60}"
 START_ON_TAIL_ONLY="${V2X_CHAIN_START_ON_TAIL_ONLY:-1}"
 SSH_OPTS=(-n -o ConnectTimeout=10)
+ALLOWED_FARM_HOSTS="${V2X_ALLOWED_FARM_HOSTS:-farm2,farm6,farm7}"
+ENABLE_CPS_OFFLOAD="${V2X_ENABLE_CPS_OFFLOAD:-0}"
 
 CPS_QUEUE_ROOT_FILE="${CPS_QUEUE_ROOT_FILE:-/Users/jy/.codex/v2x_cps_offload_queue_root}"
 CPS_JOBS_FILE_FILE="${CPS_JOBS_FILE_FILE:-/Users/jy/.codex/v2x_cps_offload_jobs_file}"
@@ -29,6 +31,15 @@ CPS_RECOVERY_PID="${CPS_RECOVERY_PID:-/tmp/v2x_cps_current_recovery_$OBJECTIVE_S
 
 log() {
   printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
+}
+
+host_allowed() {
+  local host_tag
+  host_tag="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case ",$ALLOWED_FARM_HOSTS," in
+    *",$host_tag,"*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 queue_counts() {
@@ -77,7 +88,13 @@ launch_farm_waiter() {
   local gpu="$3"
   local log_path="$RESULTS_ROOT/objective_full_${host_tag}_gpu${gpu}_waiter_$OBJECTIVE_STAMP.log"
   local pid_path="$RESULTS_ROOT/objective_full_${host_tag}_gpu${gpu}_waiter_$OBJECTIVE_STAMP.pid"
-  ssh "${SSH_OPTS[@]}" "$ssh_host" "if [ -f '$pid_path' ] && kill -0 \$(cat '$pid_path') 2>/dev/null; then exit 0; fi; cd '$FARM_ROOT' || exit 1; JOB_FILE='$OBJECTIVE_JOB_FILE' OUT_ROOT='$OBJECTIVE_OUT_ROOT' V2X_HOST_TAG='$host_tag' V2X_ALLOWED_GPUS='$gpu' V2X_MIN_GPUS='1' V2X_MAX_GPUS='1' V2X_GPU_POLL_SECONDS='${V2X_GPU_POLL_SECONDS:-60}' V2X_WAIT_FOR_EXISTING_SHARED_LAUNCHER='0' nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh > '$log_path' 2>&1 < /dev/null & echo \$! > '$pid_path'"
+
+  if ! host_allowed "$host_tag"; then
+    log "skipped objective $host_tag waiter gpu=$gpu allowed_hosts=$ALLOWED_FARM_HOSTS"
+    return
+  fi
+
+  ssh "${SSH_OPTS[@]}" "$ssh_host" "if [ -f '$pid_path' ] && kill -0 \$(cat '$pid_path') 2>/dev/null; then exit 0; fi; cd '$FARM_ROOT' || exit 1; JOB_FILE='$OBJECTIVE_JOB_FILE' OUT_ROOT='$OBJECTIVE_OUT_ROOT' V2X_HOST_TAG='$host_tag' V2X_ALLOWED_FARM_HOSTS='$ALLOWED_FARM_HOSTS' V2X_ALLOWED_GPUS='$gpu' V2X_MIN_GPUS='1' V2X_MAX_GPUS='1' V2X_GPU_POLL_SECONDS='${V2X_GPU_POLL_SECONDS:-60}' V2X_WAIT_FOR_EXISTING_SHARED_LAUNCHER='0' nohup bash experiments/v2xverse_codriving_diag/bin/wait_launch_phase1_full_farm_shared.sh > '$log_path' 2>&1 < /dev/null & echo \$! > '$pid_path'"
   log "ensured objective $host_tag waiter gpu=$gpu"
 }
 
@@ -90,15 +107,6 @@ launch_farm_waiters() {
   launch_farm_waiter FARM7 farm7 0
   launch_farm_waiter FARM7 farm7 1
   launch_farm_waiter FARM7 farm7 2
-  launch_farm_waiter FARM8 farm8 0
-  launch_farm_waiter FARM8 farm8 1
-  launch_farm_waiter FARM8 farm8 2
-  launch_farm_waiter FARM8 farm8 3
-  launch_farm_waiter FARM9 farm9 1
-  launch_farm_waiter FARM9 farm9 2
-  launch_farm_waiter FARM1 farm1 1
-  launch_farm_waiter FARM1 farm1 2
-  launch_farm_waiter FARM1 farm1 3
 }
 
 launch_postprocess_monitor() {
@@ -109,6 +117,11 @@ launch_postprocess_monitor() {
 }
 
 configure_cps_monitor() {
+  if [ "$ENABLE_CPS_OFFLOAD" != "1" ]; then
+    log "CPS offload disabled for objective chain V2X_ENABLE_CPS_OFFLOAD=$ENABLE_CPS_OFFLOAD"
+    return
+  fi
+
   if current_queue_has_cps_running; then
     launch_current_cps_recovery_monitor
   fi

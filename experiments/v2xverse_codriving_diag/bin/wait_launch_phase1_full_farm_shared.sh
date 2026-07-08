@@ -11,11 +11,27 @@ POLL_SECONDS="${V2X_GPU_POLL_SECONDS:-60}"
 MIN_GPUS="${V2X_MIN_GPUS:-1}"
 MAX_GPUS="${V2X_MAX_GPUS:-99}"
 ALLOWED_GPUS="${V2X_ALLOWED_GPUS:-}"
+ALLOWED_FARM_HOSTS="${V2X_ALLOWED_FARM_HOSTS:-farm2,farm6,farm7}"
 WAIT_FOR_EXISTING_SHARED_LAUNCHER="${V2X_WAIT_FOR_EXISTING_SHARED_LAUNCHER:-0}"
+HOST_TAG="${V2X_HOST_TAG:-$(hostname)}"
+
+host_allowed() {
+  local host_tag
+  host_tag="$(printf '%s' "$HOST_TAG" | tr '[:upper:]' '[:lower:]')"
+  case ",$ALLOWED_FARM_HOSTS," in
+    *",$host_tag,"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if ! host_allowed; then
+  echo "$(date -Is) shared FARM full waiter disabled: host=${HOST_TAG} allowed=${ALLOWED_FARM_HOSTS}"
+  exit 0
+fi
 
 active_shared_launcher() {
   local out_root="${OUT_ROOT:-}"
-  local host_tag="${V2X_HOST_TAG:-$(hostname)}"
+  local host_tag="$HOST_TAG"
   [ -n "$out_root" ] || return 1
   pgrep -af "launch_shared_queue.py" \
     | awk -v out_root="$out_root" -v host_tag="$host_tag" '
@@ -96,9 +112,9 @@ while true; do
   GPU_COUNT="$(count_gpus "$GPUS")"
   if [ "$GPU_COUNT" -ge "$MIN_GPUS" ]; then
     export V2X_GPU_LIST="$GPUS"
-    echo "$(date -Is) launching shared FARM full queue on ${V2X_HOST_TAG:-$(hostname)} GPUs=$V2X_GPU_LIST"
+    echo "$(date -Is) launching shared FARM full queue on ${HOST_TAG} GPUs=$V2X_GPU_LIST"
     exec bash "$ROOT/experiments/v2xverse_codriving_diag/bin/launch_phase1_full_farm_shared.sh"
   fi
-  echo "$(date -Is) shared FARM full waiting: free_gpus=${GPUS:-none} count=$GPU_COUNT min=$MIN_GPUS allowed=${ALLOWED_GPUS:-all} mem<=${MEM_LIMIT_MIB}MiB util<=${UTIL_LIMIT_PCT}%"
+  echo "$(date -Is) shared FARM full waiting: host=${HOST_TAG} free_gpus=${GPUS:-none} count=$GPU_COUNT min=$MIN_GPUS allowed_gpus=${ALLOWED_GPUS:-all} allowed_hosts=${ALLOWED_FARM_HOSTS} mem<=${MEM_LIMIT_MIB}MiB util<=${UTIL_LIMIT_PCT}%"
   sleep "$POLL_SECONDS"
 done

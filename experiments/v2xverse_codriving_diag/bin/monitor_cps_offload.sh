@@ -27,12 +27,18 @@ JOBS_PER_GPU="${V2X_CPS_OFFLOAD_JOBS_PER_GPU:-1}"
 MAX_JOBS_PER_BATCH="${V2X_CPS_OFFLOAD_MAX_JOBS_PER_BATCH:-0}"
 CPS_OFFLOAD_PREFIX="${V2X_CPS_OFFLOAD_PREFIX:-phase1_full_cps_offload}"
 ONE_BATCH_PER_GPU="${V2X_CPS_OFFLOAD_ONE_BATCH_PER_GPU:-1}"
+ENABLE_CPS_OFFLOAD="${V2X_ENABLE_CPS_OFFLOAD:-0}"
 
 mkdir -p "$LOCAL_TMP"
 
 log() {
   printf '%s %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
 }
+
+if [ "$ENABLE_CPS_OFFLOAD" != "1" ]; then
+  log "CPS offload disabled V2X_ENABLE_CPS_OFFLOAD=$ENABLE_CPS_OFFLOAD"
+  exit 0
+fi
 
 memory_rule() {
   if [ "${MAX_USED_MIB:-0}" != "0" ]; then

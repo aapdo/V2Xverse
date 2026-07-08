@@ -10,6 +10,21 @@ export PYTHONPATH="$ROOT:${PYTHONPATH:-}"
 export WANDB_PROJECT="${WANDB_PROJECT:-v2xverse-codriving-zero-shot}"
 JOB_FILE="${JOB_FILE:-experiments/v2xverse_codriving_diag/jobs_phase1_full_farm_shared.tsv}"
 HOST_TAG="${V2X_HOST_TAG:-$(hostname)}"
+ALLOWED_FARM_HOSTS="${V2X_ALLOWED_FARM_HOSTS:-farm2,farm6,farm7}"
+
+host_allowed() {
+  local host_tag
+  host_tag="$(printf '%s' "$HOST_TAG" | tr '[:upper:]' '[:lower:]')"
+  case ",$ALLOWED_FARM_HOSTS," in
+    *",$host_tag,"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if ! host_allowed; then
+  echo "$(date -Is) shared FARM full launcher disabled: host=${HOST_TAG} allowed=${ALLOWED_FARM_HOSTS}"
+  exit 0
+fi
 
 STAMP="${V2X_FULL_SWEEP_ID:-$(date +%Y%m%d_%H%M%S)}"
 OUT_ROOT="${OUT_ROOT:-$ROOT/experiments/v2xverse_codriving_diag/results/phase1_full_farm_shared_$STAMP}"
